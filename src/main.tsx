@@ -1,10 +1,6 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import AudioTranscriptPlayer from './App.tsx'
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import "./index.css";
+import AudioTranscriptPlayer from "./App.tsx";
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <AudioTranscriptPlayer />
-  </StrictMode>,
-)
+createRoot(document.getElementById("root")!).render(<AudioTranscriptPlayer />);

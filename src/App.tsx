@@ -1,10 +1,10 @@
-import { useEffect, useState, useRef } from 'react';
-import { Mic, MicOff } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import transcript from './transcript'; 
-import { getEphemeralKey } from './init-session';
+import { useEffect, useState, useRef } from "react";
+import { Mic, MicOff } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { getEphemeralKey } from "./ai-utils";
+import { HackerNewsSummary } from "@/components/HackerNewsSummary";
 
 declare global {
   interface Window {
@@ -81,7 +81,7 @@ const AudioTranscriptPlayer = () => {
   }
 
   // Send a message to the model
-  function sendClientEvent(message: any ) {
+  function sendClientEvent(message: any) {
     if (dataChannel) {
       message.event_id = message.event_id || crypto.randomUUID();
       dataChannel.send(JSON.stringify(message));
@@ -89,7 +89,7 @@ const AudioTranscriptPlayer = () => {
     } else {
       console.error(
         "Failed to send message - no data channel available",
-        message,
+        message
       );
     }
   }
@@ -131,7 +131,7 @@ const AudioTranscriptPlayer = () => {
   }, [dataChannel]);
 
   const [isListening, setIsListening] = useState(false);
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState("");
   const audioRef = useRef<HTMLAudioElement>(null);
   const previousTimeRef = useRef(0);
 
@@ -142,16 +142,16 @@ const AudioTranscriptPlayer = () => {
         previousTimeRef.current = audioRef.current.currentTime;
         audioRef.current.pause();
       }
-      
+
       setIsListening(true);
-      setStatus('Starting session...');
+      setStatus("Starting session...");
       await startSession();
-      setStatus('Session started');
+      setStatus("Session started");
     } else {
       setIsListening(false);
       stopSession();
-      setStatus('Session stopped');
-      setStatus('');
+      setStatus("Session stopped");
+      setStatus("");
       // Resume playback when canceling listening
       if (audioRef.current) {
         audioRef.current.play();
@@ -169,13 +169,17 @@ const AudioTranscriptPlayer = () => {
             className="w-full mb-4"
             controls
           />
-          
+
           <div className="flex justify-center">
             <Button
               onClick={toggleListening}
-              className={`w-12 h-12 rounded-full ${isListening ? 'bg-red-500 hover:bg-red-600' : ''}`}
+              className={`w-12 h-12 rounded-full ${isListening ? "bg-red-500 hover:bg-red-600" : ""}`}
             >
-              {isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+              {isListening ? (
+                <MicOff className="w-6 h-6" />
+              ) : (
+                <Mic className="w-6 h-6" />
+              )}
             </Button>
           </div>
 
@@ -184,6 +188,9 @@ const AudioTranscriptPlayer = () => {
               <AlertDescription>{status}</AlertDescription>
             </Alert>
           )}
+        </div>
+        <div className="mt-6">
+          <HackerNewsSummary />
         </div>
       </CardContent>
     </Card>
