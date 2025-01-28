@@ -36,7 +36,7 @@ export async function getEphemeralKey() {
   return data.client_secret.value;
 }
 
-export async function summarizeArticle(
+export async function generatePodcastScript(
   articleData: ArticleData
 ): Promise<string> {
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -50,8 +50,16 @@ export async function summarizeArticle(
       messages: [
         {
           role: "system",
-          content:
-            "You are a helpful assistant that provides podcast scripts for text articles.",
+          content: `
+You are a helpful assistant that provides podcast scripts for text articles. The script should
+only contain lines of dialogue exchanged between the two hosts. The script should be in the
+following format:
+
+<Host 1>: <line_of_dialogue>
+<Host 2>: <line_of_dialogue>
+<Host 1>: <line_of_dialogue>
+<Host 2>: <line_of_dialogue>
+`,
         },
         {
           role: "user",

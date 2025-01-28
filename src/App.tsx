@@ -160,7 +160,7 @@ const AudioTranscriptPlayer = () => {
   };
 
   return (
-    <Card className="w-full w-[90vw] md:w-[60vw] lg:w-[40vw] mx-auto mt-8">
+    <Card className="w-[90vw] mx-auto mt-8">
       <CardContent className="p-6">
         <div className="space-y-4">
           <audio

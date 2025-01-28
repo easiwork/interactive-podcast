@@ -1,6 +1,8 @@
 import express from "express";
 import cors from "cors";
 import { ElevenLabsClient } from "elevenlabs";
+import path from "node:path";
+import fs from "node:fs";
 
 // import { TextToSpeechClient } from "@google-cloud/text-to-speech";
 // import { GoogleAuth } from "google-auth-library";
@@ -37,10 +39,11 @@ const client = new ElevenLabsClient({
 });
 
 export const createAudioStreamFromText = async (
-  text: string
+  text: string,
+  voice: string = "Rachel"
 ): Promise<Buffer> => {
   const audioStream = await client.generate({
-    voice: "Rachel",
+    voice,
     model_id: "eleven_turbo_v2_5",
     text,
   });
@@ -58,15 +61,37 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+type VoiceOption = "Rachel" | "Julian";
+
+export interface TextToSpeechRequest {
+  text: string;
+  voice: VoiceOption;
+}
+
+const ENABLE_TEST = true;
+
 // Text-to-speech endpoint
 app.post("/api/text-to-speech", async (req, res) => {
   try {
-    const { text } = req.body;
+    const { text, voice } = req.body as TextToSpeechRequest;
 
-    const audioBuffer = await createAudioStreamFromText(text);
+    if (ENABLE_TEST) {
+      let audioPath = "";
+      if (voice === "Rachel") {
+        audioPath = path.join(process.cwd(), "public", "rachel.mp3");
+      } else {
+        audioPath = path.join(process.cwd(), "public", "daniel.mp3");
+      }
 
-    res.setHeader("Content-Type", "audio/mpeg");
-    res.status(200).send(audioBuffer);
+      const testAudioBuffer = await fs.promises.readFile(audioPath);
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.status(200).send(testAudioBuffer);
+    } else {
+      const audioBuffer = await createAudioStreamFromText(text, voice);
+
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.status(200).send(audioBuffer);
+    }
   } catch (err) {
     res.status(400).send("Invalid request body");
   }
