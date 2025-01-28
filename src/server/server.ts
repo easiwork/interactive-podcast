@@ -2,32 +2,34 @@ import express from "express";
 import cors from "cors";
 import { ElevenLabsClient } from "elevenlabs";
 
-// import { TextToSpeechClient } from '@google-cloud/text-to-speech';
-// import { GoogleAuth } from 'google-auth-library';
+// import { TextToSpeechClient } from "@google-cloud/text-to-speech";
+// import { GoogleAuth } from "google-auth-library";
 
 // const auth = new GoogleAuth({
 //   keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
-//   scopes: ['https://www.googleapis.com/auth/cloud-platform']
+//   scopes: ["https://www.googleapis.com/auth/cloud-platform"],
 // });
 
 // const textToSpeechClient = new TextToSpeechClient({ auth });
 
-// export const createGoogleAudioFromText = async (text: string): Promise<Buffer> => {
+// export const createGoogleAudioFromText = async (
+//   text: string
+// ): Promise<Buffer> => {
 //   const request = {
 //     input: { text },
 //     voice: {
-//       languageCode: 'en-US',
-//       name: 'en-US-Neural2-F'
+//       languageCode: "en-US",
+//       name: "en-US-Neural2-F",
 //     },
 //     audioConfig: {
-//       audioEncoding: 'MP3',
+//       audioEncoding: "MP3",
 //       speakingRate: 1.0,
-//       pitch: 0.0
-//     }
-//   };
+//       pitch: 0.0,
+//     },
+//   } as any;
 
 //   const [response] = await textToSpeechClient.synthesizeSpeech(request);
-//   return Buffer.from(response.audioContent);
+//   return Buffer.from(response.audioContent as any);
 // };
 
 const client = new ElevenLabsClient({
