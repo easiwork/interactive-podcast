@@ -1,6 +1,5 @@
 import { ArticleData } from "@extractus/article-extractor";
 import transcript from "./transcript";
-import { ElevenLabsClient } from "elevenlabs";
 
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
 
@@ -69,23 +68,3 @@ ${JSON.stringify(articleData)}`,
   const data = await response.json();
   return data.choices[0].message.content;
 }
-
-const client = new ElevenLabsClient({
-  apiKey: import.meta.env.VITE_ELEVENLABS_API_KEY,
-});
-
-export const createAudioStreamFromText = async (
-  text: string
-): Promise<Buffer> => {
-  const audioStream = await client.generate({
-    voice: "Rachel",
-    model_id: "eleven_turbo_v2_5",
-    text,
-  });
-  const chunks: Buffer[] = [];
-  for await (const chunk of audioStream) {
-    chunks.push(chunk);
-  }
-  const content = Buffer.concat(chunks);
-  return content;
-};
