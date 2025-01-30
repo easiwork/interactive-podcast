@@ -62,7 +62,7 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-export type VoiceOption = "Rachel" | "Julian";
+export type VoiceOption = "Rachel" | "Daniel";
 
 export interface TextToSpeechRequest {
   text: string;
@@ -103,6 +103,7 @@ app.post("/api/text-to-speech", async (req, res) => {
     }
   } catch (err) {
     res.status(400).send("Invalid request body");
+    console.error(err);
   }
 });
 
