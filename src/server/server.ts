@@ -3,6 +3,7 @@ import cors from "cors";
 import { ElevenLabsClient } from "elevenlabs";
 import path from "node:path";
 import fs from "node:fs";
+import { extract } from "@extractus/article-extractor";
 
 // import { TextToSpeechClient } from "@google-cloud/text-to-speech";
 // import { GoogleAuth } from "google-auth-library";
@@ -61,7 +62,7 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-type VoiceOption = "Rachel" | "Julian";
+export type VoiceOption = "Rachel" | "Julian";
 
 export interface TextToSpeechRequest {
   text: string;
@@ -69,6 +70,14 @@ export interface TextToSpeechRequest {
 }
 
 const ENABLE_TEST = true;
+
+// Extract article from HTML endpoint
+app.post("/api/extract-article", async (req, res) => {
+  const { url } = req.body as { url: string };
+  const articleData = await extract(url);
+  res.setHeader("Content-Type", "application/json");
+  res.status(200).json(articleData);
+});
 
 // Text-to-speech endpoint
 app.post("/api/text-to-speech", async (req, res) => {
