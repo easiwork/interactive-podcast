@@ -27,23 +27,69 @@ const mapToVoice = (host: string): VoiceOption => {
   return "Julian";
 };
 
-const generateAudioUrl = async (line: string): Promise<string> => {
+const fetchAudio = async (line: string) => {
   const [host, text] = line.split(": ");
   const voice = mapToVoice(host.slice(1, -1));
 
-  console.log("generateAudioUrl", line, voice);
-
-  const audioResponse = await fetch(TEXT_TO_SPEECH_URL, {
+  return fetch(TEXT_TO_SPEECH_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ text, voice } satisfies TextToSpeechRequest),
   });
+};
+
+const generateAudioUrl = async (line: string): Promise<string> => {
+  const audioResponse = await fetchAudio(line);
 
   const audioBlob = await audioResponse.blob();
   const audioUrl = URL.createObjectURL(audioBlob);
   return audioUrl;
+};
+
+const generateAndCombineAudio = async (
+  script: string[],
+  audioContext: AudioContext
+) => {
+  const audioBuffers = [];
+
+  // Load and decode each MP3 file
+  for (const line of script) {
+    const response = await fetchAudio(line);
+    const arrayBuffer = await response.arrayBuffer();
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+    audioBuffers.push(audioBuffer);
+  }
+
+  // Determine total length
+  const totalDuration = audioBuffers.reduce(
+    (sum, buffer) => sum + buffer.duration,
+    0
+  );
+  const sampleRate = audioContext.sampleRate;
+  const numChannels = audioBuffers[0].numberOfChannels;
+  const totalLength = Math.ceil(totalDuration * sampleRate);
+
+  // Create a new AudioBuffer to store merged audio
+  const mergedBuffer = audioContext.createBuffer(
+    numChannels,
+    totalLength,
+    sampleRate
+  );
+
+  // Copy audio data into the new buffer
+  let offset = 0;
+  for (const buffer of audioBuffers) {
+    for (let channel = 0; channel < numChannels; channel++) {
+      mergedBuffer
+        .getChannelData(channel)
+        .set(buffer.getChannelData(channel), offset);
+    }
+    offset += Math.ceil(buffer.duration * sampleRate); // Fix: Use actual number of samples
+  }
+
+  return mergedBuffer;
 };
 
 const EXTRACT_ARTICLE_URL = "http://localhost:3000/api/extract-article";
@@ -58,6 +104,10 @@ export function HackerNewsSummary() {
   const [audioUrl, setAudioUrl] = useState<string | undefined>();
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState(true);
+
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioBufferRef = useRef<AudioBuffer | null>(null);
+  const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
 
   useEffect(() => {
     fetchTopStoryAndGenScript();
@@ -114,19 +164,51 @@ export function HackerNewsSummary() {
     }
   };
 
+  const audioContextRef = useRef<AudioContext>(new AudioContext());
   useEffect(() => {
-    generateAudio();
-  }, [script, currentScriptIndex]);
-
-  const generateAudio = async () => {
-    console.log("generateAudio", script, currentScriptIndex);
-    if (script && currentScriptIndex < script.length) {
-      const audioUrl = await generateAudioUrl(script[currentScriptIndex]);
-
-      setTimeout(() => {
-        setAudioUrl(audioUrl);
-      }, 500);
+    if (!script) {
+      return;
     }
+
+    generateAndCombineAudio(script, audioContextRef.current).then((b) => {
+      audioBufferRef.current = b;
+      playAudio();
+    });
+
+    // Cleanup function
+    return () => {
+      if (currentSourceRef.current) {
+        currentSourceRef.current.stop();
+        currentSourceRef.current.disconnect();
+        currentSourceRef.current = null;
+      }
+    };
+  }, [script, currentScriptIndex, currentSourceRef]);
+
+  const playAudio = () => {
+    if (!audioBufferRef.current || isPlaying) return;
+
+    // Clean up previous source if it exists
+    if (currentSourceRef.current) {
+      currentSourceRef.current.stop();
+      currentSourceRef.current.disconnect();
+      currentSourceRef.current = null;
+    }
+
+    const source = audioContextRef.current.createBufferSource();
+    source.buffer = audioBufferRef.current;
+    source.connect(audioContextRef.current.destination);
+    source.onended = () => {
+      setIsPlaying(false);
+      // Clean up after playback ends
+      source.disconnect();
+      currentSourceRef.current = null;
+    };
+    console.log("playing audio");
+    source.start();
+    setIsPlaying(true);
+
+    currentSourceRef.current = source;
   };
 
   if (loading) {
