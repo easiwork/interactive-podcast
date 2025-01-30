@@ -52,8 +52,9 @@ export async function generatePodcastScript(
           role: "system",
           content: `
 You are a helpful assistant that provides podcast scripts for text articles. The script should
-only contain lines of dialogue exchanged between the two hosts. The script should be in the
-following format:
+only contain lines of dialogue exchanged between the two hosts. Do not mention the podcast name
+or include a sign off at the end. The script should just be a conversation between the two hosts
+about the article. The script should be in the following format:
 
 <Host 1>: <line_of_dialogue>
 <Host 2>: <line_of_dialogue>
