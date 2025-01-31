@@ -9,6 +9,7 @@ import {
   CollapsibleTrigger,
   CollapsibleContent,
 } from "./ui/collapsible";
+import { getHost } from "@/ai-utils";
 
 const mapToVoice = (host: string): VoiceOption => {
   if (host === "Host 1") {
@@ -39,9 +40,8 @@ const generateAudioUrl = async (line: string): Promise<string> => {
   return audioUrl;
 };
 
-const GENERATE_PODCAST_SCRIPT_URL =
-  "http://localhost:3000/api/generate-podcast-script";
-const TEXT_TO_SPEECH_URL = "http://localhost:3000/api/text-to-speech";
+const GENERATE_PODCAST_SCRIPT_URL = `${getHost()}/api/generate-podcast-script`;
+const TEXT_TO_SPEECH_URL = `${getHost()}/api/text-to-speech`;
 
 interface HackerNewsSummaryProps {
   story: Story;

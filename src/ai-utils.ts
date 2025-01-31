@@ -13,7 +13,15 @@ assistant: “it's sponsored by XYZ solutions.”
 that's it. remember—only relevant details from the transcript.
 `;
 
-const EPHEMERAL_KEY_URL = "http://localhost:3000/api/get-ephemeral-key";
+export const getHost = () => {
+  if (import.meta.env.DEV) {
+    return "http://localhost:3000";
+  }
+
+  return "";
+};
+
+const EPHEMERAL_KEY_URL = `${getHost()}/api/get-ephemeral-key`;
 
 export async function getEphemeralKey() {
   const tokenResponse = await fetch(EPHEMERAL_KEY_URL, {
