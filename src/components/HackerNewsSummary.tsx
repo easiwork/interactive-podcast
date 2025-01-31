@@ -102,8 +102,8 @@ const TEXT_TO_SPEECH_URL = "http://localhost:3000/api/text-to-speech";
 
 export function HackerNewsSummary() {
   const [article, setArticle] = useState<Article | null>(null);
-  const [rawScript, setRawScript] = useState<string>("");
   const [script, setScript] = useState<string | undefined>();
+  const [scriptLines, setScriptLines] = useState<string[] | undefined>();
   const [currentScriptIndex, setCurrentScriptIndex] = useState<number>(0);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [audioUrl, setAudioUrl] = useState<string | undefined>();
@@ -151,6 +151,7 @@ export function HackerNewsSummary() {
       };
 
       setScript(script);
+      setScriptLines(script.split(/[\n\r]+/));
     } catch (err) {
       setError("Failed to fetch article");
       console.error(err);
@@ -160,32 +161,43 @@ export function HackerNewsSummary() {
   };
 
   const audioContextRef = useRef<AudioContext>(new AudioContext());
+  // useEffect(() => {
+  //   if (!script) {
+  //     return;
+  //   }
+
+  //   generateAndCombineAudio(script, audioContextRef.current).then((b) => {
+  //     audioBufferRef.current = b;
+
+  //     const source = audioContextRef.current.createBufferSource();
+  //     source.buffer = audioBufferRef.current;
+  //     source.connect(audioContextRef.current.destination);
+  //     source.onended = () => {
+  //       setIsPlaying(false);
+  //     };
+  //     source.start();
+  //     setCurrentAudioSource(source);
+  //   });
+
+  //   return () => {
+  //     if (currentAudioSource) {
+  //       currentAudioSource.stop();
+  //       currentAudioSource.disconnect();
+  //       setCurrentAudioSource(null);
+  //     }
+  //   };
+  // }, [script]);
+
   useEffect(() => {
-    if (!script) {
+    if (!scriptLines) {
       return;
     }
 
-    generateAndCombineAudio(script, audioContextRef.current).then((b) => {
-      audioBufferRef.current = b;
-
-      const source = audioContextRef.current.createBufferSource();
-      source.buffer = audioBufferRef.current;
-      source.connect(audioContextRef.current.destination);
-      source.onended = () => {
-        setIsPlaying(false);
-      };
-      source.start();
-      setCurrentAudioSource(source);
+    generateAudioUrl(scriptLines[currentScriptIndex]).then((url) => {
+      setAudioUrl(url);
+      setIsPlaying(true);
     });
-
-    return () => {
-      if (currentAudioSource) {
-        currentAudioSource.stop();
-        currentAudioSource.disconnect();
-        setCurrentAudioSource(null);
-      }
-    };
-  }, [script]);
+  }, [scriptLines, currentScriptIndex]);
 
   if (loading) {
     return (
@@ -217,9 +229,10 @@ export function HackerNewsSummary() {
           </a>
         </CardTitle>
       </CardHeader>
+
       <CardContent>
         <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-          {script?.split(/[\n\r]+/).map((line, index) => (
+          {scriptLines?.map((line, index) => (
             <span key={index}>
               {line}
               <br />
@@ -227,6 +240,7 @@ export function HackerNewsSummary() {
           ))}
         </p>
       </CardContent>
+
       <CardFooter>
         {audioUrl && (
           <audio
@@ -238,7 +252,37 @@ export function HackerNewsSummary() {
           />
         )}
       </CardFooter>
-      {audioBufferRef.current && (
+
+      {audioRef.current && (
+        <>
+          <MicButton
+            onListen={() => {
+              audioRef.current?.pause();
+              setIsPlaying(false);
+            }}
+            onMute={() => {
+              audioRef.current?.play();
+              setIsPlaying(true);
+            }}
+            script={scriptLines?.slice(0, currentScriptIndex).join("\n")}
+          />
+          <Button
+            onClick={() => {
+              if (isPlaying) {
+                audioRef.current?.pause();
+                setIsPlaying(false);
+              } else {
+                audioRef.current?.play();
+                setIsPlaying(true);
+              }
+            }}
+          >
+            {isPlaying ? "Pause" : "Play"}
+          </Button>
+        </>
+      )}
+
+      {/* {audioBufferRef.current && (
         <>
           <MicButton
             onListen={() => {
@@ -269,7 +313,7 @@ export function HackerNewsSummary() {
             {isPlaying ? "Pause" : "Play"}
           </Button>
         </>
-      )}
+      )} */}
     </Card>
   );
 }

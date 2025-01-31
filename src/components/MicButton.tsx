@@ -39,7 +39,7 @@ const MicButton = ({ onListen, onMute, script }: MicButtonProps) => {
   useEffect(() => {
     if (isSessionActive) {
       sendTextMessage(
-        `Wait for the user to finish speaking before saying anything about the podcast. The podcast script is as follows:\n${script}`
+        `The user has paused the podcast to ask a question. Wait for the user to finish speaking before saying anything about the podcast. Here is the script up to the point where the user paused:\n${script}`
       );
     }
   }, [isSessionActive, script]);

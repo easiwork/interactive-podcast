@@ -69,7 +69,7 @@ export interface TextToSpeechRequest {
   voice: VoiceOption;
 }
 
-const ENABLE_TEST = true;
+const ENABLE_TEST = false;
 
 interface GetEphemeralKeyRequest {
   prompt: string;
