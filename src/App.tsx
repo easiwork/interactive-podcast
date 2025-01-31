@@ -21,28 +21,6 @@ const AudioTranscriptPlayer = () => {
   return (
     <Card className="w-[90vw] mx-auto mt-8">
       <CardContent className="p-6">
-        <div className="space-y-4">
-          <audio
-            ref={audioRef}
-            src="test2.mp3"
-            className="w-full mb-4"
-            controls
-          />
-
-          <MicButton
-            onListen={() => {
-              if (audioRef.current) {
-                previousTimeRef.current = audioRef.current.currentTime;
-                audioRef.current.pause();
-              }
-            }}
-            onMute={() => {
-              if (audioRef.current) {
-                audioRef.current.play();
-              }
-            }}
-          />
-        </div>
         <div className="mt-6">
           <HackerNewsSummary />
         </div>

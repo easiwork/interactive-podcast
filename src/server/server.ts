@@ -3,7 +3,7 @@ import cors from "cors";
 import { ElevenLabsClient } from "elevenlabs";
 import path from "node:path";
 import fs from "node:fs";
-import { extract } from "@extractus/article-extractor";
+import { ArticleData, extract } from "@extractus/article-extractor";
 
 // import { TextToSpeechClient } from "@google-cloud/text-to-speech";
 // import { GoogleAuth } from "google-auth-library";
@@ -71,12 +71,94 @@ export interface TextToSpeechRequest {
 
 const ENABLE_TEST = true;
 
+interface GetEphemeralKeyRequest {
+  prompt: string;
+}
+
+app.post("/api/get-ephemeral-key", async (req, res) => {
+  const { prompt } = req.body as GetEphemeralKeyRequest;
+
+  const tokenResponse = await fetch(
+    "https://api.openai.com/v1/realtime/sessions",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-realtime-preview-2024-12-17",
+        voice: "sage",
+        instructions: prompt,
+      }),
+    }
+  );
+
+  const data = await tokenResponse.json();
+
+  res.setHeader("Content-Type", "application/json");
+  res.status(200).json(data);
+});
+
+export async function generatePodcastScript(
+  articleData: ArticleData
+): Promise<string> {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4-turbo-preview",
+      messages: [
+        {
+          role: "system",
+          content: `
+You are a helpful assistant that provides podcast scripts for text articles. The script should
+only contain lines of dialogue exchanged between the two hosts. Do not mention the podcast name
+or include a sign off at the end. The script should just be a conversation between the two hosts
+about the article. The script should be in the following format:
+
+<Host 1>: <line_of_dialogue>
+<Host 2>: <line_of_dialogue>
+<Host 1>: <line_of_dialogue>
+<Host 2>: <line_of_dialogue>
+`,
+        },
+        {
+          role: "user",
+          content: `
+You will be provided with an article from a website. The article will be provided as a JSON structure.
+
+Here is the JSON data as follows:
+${JSON.stringify(articleData)}`,
+        },
+      ],
+    }),
+  });
+
+  const data = await response.json();
+  return data.choices[0].message.content;
+}
+
 // Extract article from HTML endpoint
-app.post("/api/extract-article", async (req, res) => {
+app.post("/api/generate-podcast-script", async (req, res) => {
   const { url } = req.body as { url: string };
   const articleData = await extract(url);
+
+  if (!articleData) {
+    console.error("Failed to extract article");
+    res.status(500).json({ error: "Failed to extract article" });
+    return;
+  }
+
+  // Generate podcast script with GPT
+  const rawScript = await generatePodcastScript(articleData);
+  const script = rawScript.split(/[\n\r]+/);
+
   res.setHeader("Content-Type", "application/json");
-  res.status(200).json(articleData);
+  res.status(200).json({ script });
 });
 
 // Text-to-speech endpoint

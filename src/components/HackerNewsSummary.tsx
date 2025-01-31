@@ -94,7 +94,8 @@ const generateAndCombineAudio = async (
   return mergedBuffer;
 };
 
-const EXTRACT_ARTICLE_URL = "http://localhost:3000/api/extract-article";
+const GENERATE_PODCAST_SCRIPT_URL =
+  "http://localhost:3000/api/generate-podcast-script";
 const TEXT_TO_SPEECH_URL = "http://localhost:3000/api/text-to-speech";
 
 export function HackerNewsSummary() {
@@ -136,29 +137,16 @@ export function HackerNewsSummary() {
         url: story.url,
       });
 
-      const articleDataResponse = await fetch(EXTRACT_ARTICLE_URL, {
+      const podcastScriptResponse = await fetch(GENERATE_PODCAST_SCRIPT_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ url: story.url }),
       });
-      const articleData = await articleDataResponse.json();
-      if (!articleData) {
-        console.error("Failed to extract article");
-        return;
-      }
+      const { script } = await podcastScriptResponse.json();
 
-      console.log("articleData", articleData);
-
-      // Generate podcast script with GPT
-      // const rawScript = await generatePodcastScript(articleData);
-
-      // temporary mock script
-      const rawScript = MOCK_SCRIPT;
-
-      setRawScript(rawScript);
-      setScript(rawScript.split(/[\n\r]+/));
+      setScript(script);
     } catch (err) {
       setError("Failed to fetch article");
       console.error(err);

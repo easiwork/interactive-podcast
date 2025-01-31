@@ -11,26 +11,18 @@ assistant: “they spent most of the time on climate change and only briefly men
 user: “who's the sponsor for the show?”
 assistant: “it's sponsored by XYZ solutions.”
 that's it. remember—only relevant details from the transcript.
-Here is the transcript:
-${transcript}
 `;
 
+const EPHEMERAL_KEY_URL = "http://localhost:3000/api/get-ephemeral-key";
+
 export async function getEphemeralKey() {
-  const tokenResponse = await fetch(
-    "https://api.openai.com/v1/realtime/sessions",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-realtime-preview-2024-12-17",
-        voice: "sage",
-        instructions: prompt,
-      }),
-    }
-  );
+  const tokenResponse = await fetch(EPHEMERAL_KEY_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ prompt }),
+  });
 
   const data = await tokenResponse.json();
   return data.client_secret.value;
@@ -39,10 +31,11 @@ export async function getEphemeralKey() {
 export async function generatePodcastScript(
   articleData: ArticleData
 ): Promise<string> {
+  const key = await getEphemeralKey();
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      Authorization: `Bearer ${key}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
