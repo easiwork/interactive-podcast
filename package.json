@@ -16,6 +16,7 @@
     "@extractus/article-extractor": "^8.0.16",
     "@google-cloud/text-to-speech": "^5.8.0",
     "@mui/material": "^6.4.1",
+    "@radix-ui/react-collapsible": "^1.1.2",
     "@radix-ui/react-slot": "^1.1.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

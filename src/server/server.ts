@@ -194,7 +194,7 @@ router.post("/text-to-speech", async (req, res) => {
   }
 });
 
-router.get("/healthcheck", (req, res) => {
+router.get("/healthcheck", (_, res) => {
   res.status(200).send("OK");
 });
 
@@ -205,7 +205,7 @@ if (process.env.NODE_ENV !== "development") {
 }
 
 // Handle 404 for unknown routes
-app.use((req, res) => {
+app.use((_, res) => {
   res.status(404).send("Not Found");
 });
 
