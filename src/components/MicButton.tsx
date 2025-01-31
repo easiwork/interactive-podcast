@@ -9,13 +9,15 @@ import { useRealtimeSession } from "./useRealtimeSession";
 interface MicButtonProps {
   onListen: () => void;
   onMute: () => void;
+  script?: string;
 }
 
-const MicButton = ({ onListen, onMute }: MicButtonProps) => {
+const MicButton = ({ onListen, onMute, script }: MicButtonProps) => {
   const [isListening, setIsListening] = useState(false);
   const [status, setStatus] = useState("");
 
-  const { startSession, stopSession } = useRealtimeSession();
+  const { startSession, stopSession, sendTextMessage, isSessionActive } =
+    useRealtimeSession();
 
   const toggleListening = async () => {
     if (!isListening) {
@@ -33,6 +35,14 @@ const MicButton = ({ onListen, onMute }: MicButtonProps) => {
       onMute();
     }
   };
+
+  useEffect(() => {
+    if (isSessionActive) {
+      sendTextMessage(
+        `Wait for the user to finish speaking before saying anything about the podcast. The podcast script is as follows:\n${script}`
+      );
+    }
+  }, [isSessionActive, script]);
 
   return (
     <div className="space-y-4">

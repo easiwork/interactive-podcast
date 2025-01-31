@@ -102,6 +102,15 @@ export const useRealtimeSession = () => {
     sendClientEvent({ type: "response.create" });
   }
 
+  function updateSession(sessionProps: any) {
+    const event = {
+      type: "session.update",
+      session: sessionProps,
+    };
+
+    sendClientEvent(event);
+  }
+
   // Attach event listeners to the data channel when a new one is created
   useEffect(() => {
     if (dataChannel) {
@@ -124,6 +133,7 @@ export const useRealtimeSession = () => {
     dataChannel,
     startSession,
     stopSession,
+    updateSession,
     sendClientEvent,
     sendTextMessage,
   };

@@ -51,13 +51,15 @@ const generateAudioUrl = async (line: string): Promise<string> => {
 };
 
 const generateAndCombineAudio = async (
-  script: string[],
+  script: string,
   audioContext: AudioContext
 ) => {
   const audioBuffers = [];
 
+  const splitScript = script.split(/[\n\r]+/);
+
   // Load and decode each MP3 file
-  for (const line of script) {
+  for (const line of splitScript) {
     const response = await fetchAudio(line);
     const arrayBuffer = await response.arrayBuffer();
     const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
@@ -101,7 +103,7 @@ const TEXT_TO_SPEECH_URL = "http://localhost:3000/api/text-to-speech";
 export function HackerNewsSummary() {
   const [article, setArticle] = useState<Article | null>(null);
   const [rawScript, setRawScript] = useState<string>("");
-  const [script, setScript] = useState<string[] | undefined>();
+  const [script, setScript] = useState<string | undefined>();
   const [currentScriptIndex, setCurrentScriptIndex] = useState<number>(0);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [audioUrl, setAudioUrl] = useState<string | undefined>();
@@ -144,7 +146,9 @@ export function HackerNewsSummary() {
         },
         body: JSON.stringify({ url: story.url }),
       });
-      const { script } = await podcastScriptResponse.json();
+      const { script } = (await podcastScriptResponse.json()) as {
+        script: string;
+      };
 
       setScript(script);
     } catch (err) {
@@ -215,7 +219,7 @@ export function HackerNewsSummary() {
       </CardHeader>
       <CardContent>
         <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-          {script?.map((line, index) => (
+          {script?.split(/[\n\r]+/).map((line, index) => (
             <span key={index}>
               {line}
               <br />
@@ -247,6 +251,7 @@ export function HackerNewsSummary() {
                 setIsPlaying(true);
               });
             }}
+            script={script}
           />
           <Button
             onClick={() => {

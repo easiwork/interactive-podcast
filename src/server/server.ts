@@ -154,8 +154,7 @@ app.post("/api/generate-podcast-script", async (req, res) => {
   }
 
   // Generate podcast script with GPT
-  const rawScript = await generatePodcastScript(articleData);
-  const script = rawScript.split(/[\n\r]+/);
+  const script = await generatePodcastScript(articleData);
 
   res.setHeader("Content-Type", "application/json");
   res.status(200).json({ script });
