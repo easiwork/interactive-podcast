@@ -193,6 +193,10 @@ app.post("/api/text-to-speech", async (req, res) => {
   }
 });
 
+app.get("/healthcheck", (req, res) => {
+  res.status(200).send("OK");
+});
+
 // Handle 404 for unknown routes
 app.use((req, res) => {
   res.status(404).send("Not Found");
