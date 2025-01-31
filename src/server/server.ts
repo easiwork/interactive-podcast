@@ -57,6 +57,7 @@ export const createAudioStreamFromText = async (
 };
 
 const app = express();
+const router = express.Router();
 
 // Middleware
 app.use(express.json());
@@ -75,7 +76,7 @@ interface GetEphemeralKeyRequest {
   prompt: string;
 }
 
-app.post("/api/get-ephemeral-key", async (req, res) => {
+router.post("/get-ephemeral-key", async (req, res) => {
   const { prompt } = req.body as GetEphemeralKeyRequest;
 
   const tokenResponse = await fetch(
@@ -143,7 +144,7 @@ ${JSON.stringify(articleData)}`,
 }
 
 // Extract article from HTML endpoint
-app.post("/api/generate-podcast-script", async (req, res) => {
+router.post("/generate-podcast-script", async (req, res) => {
   let articleData: ArticleData | null = null;
   try {
     const { url } = req.body as { url: string };
@@ -166,7 +167,7 @@ app.post("/api/generate-podcast-script", async (req, res) => {
 });
 
 // Text-to-speech endpoint
-app.post("/api/text-to-speech", async (req, res) => {
+router.post("/text-to-speech", async (req, res) => {
   try {
     const { text, voice } = req.body as TextToSpeechRequest;
 
@@ -193,9 +194,15 @@ app.post("/api/text-to-speech", async (req, res) => {
   }
 });
 
-app.get("/healthcheck", (req, res) => {
+router.get("/healthcheck", (req, res) => {
   res.status(200).send("OK");
 });
+
+if (process.env.NODE_ENV !== "development") {
+  app.use("/", router);
+} else {
+  app.use("/api", router);
+}
 
 // Handle 404 for unknown routes
 app.use((req, res) => {

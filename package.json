@@ -8,8 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "server": "bun src/server/server.ts",
-    "server:watch": "bun --watch src/server/server.ts"
+    "server:dev": "NODE_ENV=development bun --watch src/server/server.ts",
+    "server:prod": "bun src/server/server.ts"
   },
   "dependencies": {
     "@11labs/client": "^0.0.5",
