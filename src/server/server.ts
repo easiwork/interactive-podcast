@@ -144,11 +144,16 @@ ${JSON.stringify(articleData)}`,
 
 // Extract article from HTML endpoint
 app.post("/api/generate-podcast-script", async (req, res) => {
-  const { url } = req.body as { url: string };
-  const articleData = await extract(url);
+  let articleData: ArticleData | null = null;
+  try {
+    const { url } = req.body as { url: string };
+    articleData = await extract(url);
 
-  if (!articleData) {
-    console.error("Failed to extract article");
+    if (!articleData) {
+      throw Error("No article data");
+    }
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Failed to extract article" });
     return;
   }
