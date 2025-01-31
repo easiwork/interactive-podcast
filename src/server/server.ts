@@ -120,10 +120,10 @@ only contain lines of dialogue exchanged between the two hosts. Do not mention t
 or include a sign off at the end. The script should just be a conversation between the two hosts
 about the article. The script should be in the following format:
 
-<Host 1>: <line_of_dialogue>
-<Host 2>: <line_of_dialogue>
-<Host 1>: <line_of_dialogue>
-<Host 2>: <line_of_dialogue>
+Host 1: <line_of_dialogue>
+Host 2: <line_of_dialogue>
+Host 1: <line_of_dialogue>
+Host 2: <line_of_dialogue>
 `,
         },
         {
