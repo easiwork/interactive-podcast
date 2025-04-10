@@ -6,6 +6,7 @@ import { fetchHNTopStories } from "./components/hacker-news-api";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Pause, Play, RotateCcw, RotateCw, Mic, X } from "lucide-react";
+import { useRealtimeSession } from "./components/useRealtimeSession";
 
 const NUM_STORIES = 10;
 interface StoryMetadata extends Story {
@@ -18,6 +19,7 @@ export default function App() {
   const [aiActive, setAiActive] = useState(false);
   const [duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const { startSession, stopSession, isSessionActive } = useRealtimeSession();
 
   useEffect(() => {
     // Initialize audio element
@@ -43,7 +45,8 @@ export default function App() {
       } else {
         audioRef.current.play();
         if (aiActive) {
-          setAiActive(false); // Deactivate AI when playing audio
+          setAiActive(false);
+          stopSession();
         }
       }
       setIsPlaying(!isPlaying);
@@ -75,16 +78,32 @@ export default function App() {
     }
   };
 
-  const toggleAI = () => {
-    setAiActive(!aiActive);
-    if (!aiActive) {
+  const toggleAI = async () => {
+    const newAiActive = !aiActive;
+    setAiActive(newAiActive);
+
+    if (newAiActive) {
       setIsPlaying(false);
       audioRef.current?.pause();
+      try {
+        await startSession();
+      } catch (error) {
+        console.error("Failed to start AI session:", error);
+        setAiActive(false);
+      }
     } else {
+      stopSession();
       setIsPlaying(true);
       audioRef.current?.play();
     }
   };
+
+  // Sync AI session state with our local state
+  useEffect(() => {
+    if (!isSessionActive && aiActive) {
+      setAiActive(false);
+    }
+  }, [isSessionActive]);
 
   return (
     <div className="max-w-xl mx-auto mt-10 p-4 space-y-6">
