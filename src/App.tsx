@@ -3,82 +3,64 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HackerNewsSummary } from "@/components/HackerNewsSummary";
 import { fetchHNStory, Story } from "./components/hacker-news-api";
 import { fetchHNTopStories } from "./components/hacker-news-api";
-import { Button } from "./components/ui/button";
+import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
+import { Pause, Play, RotateCcw, RotateCw, Mic, X } from "lucide-react";
 
 const NUM_STORIES = 10;
-
 interface StoryMetadata extends Story {
   expanded: boolean;
 }
 
-const AudioTranscriptPlayer = () => {
-  const [storyIds, setStoryIds] = useState<number[]>([]);
-  const [stories, setStories] = useState<StoryMetadata[]>([]);
+export default function App() {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [timestamp, setTimestamp] = useState(0);
+  const [aiActive, setAiActive] = useState(false);
 
-  useEffect(() => {
-    fetchHNTopStories().then(setStoryIds);
-  }, []);
+  const togglePlay = () => setIsPlaying(!isPlaying);
+  const rewind = () => setTimestamp((t) => Math.max(0, t - 10));
+  const fastForward = () => setTimestamp((t) => t + 10);
 
-  useEffect(() => {
-    if (!storyIds.length) {
-      return;
+  const handleSliderChange = (value: number) => setTimestamp(value);
+  const toggleAI = () => {
+    setAiActive(!aiActive);
+    if (!aiActive) {
+      setIsPlaying(false); // pause podcast when activating AI
+    } else {
+      setIsPlaying(true); // resume podcast when deactivating AI
     }
+  };
 
-    for (let i = 0; i < NUM_STORIES; i++) {
-      fetchHNStory(storyIds[i])
-        .then((s) => setStories((prev) => [...prev, { ...s, expanded: false }]))
-        .catch((e) => {
-          console.error("Failed to fetch HN story", e);
-        });
-    }
-  }, [storyIds]);
-
-  console.log("storyIds", storyIds);
-
-  return stories.map((story, index) => (
-    <Card className="w-[90vw] mx-auto mt-8" key={index}>
-      <CardHeader>
-        <CardTitle>
-          <div className="flex justify-between">
-            <a
-              href={story.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:underline"
-            >
-              {story.title}
-            </a>
-            <Button
-              variant="outline"
-              onClick={() =>
-                setStories((prev) => {
-                  const index = prev.findIndex((s) => s.id === story.id);
-                  if (index === -1) {
-                    return prev;
-                  }
-
-                  return [
-                    ...prev.slice(0, index),
-                    { ...prev[index], expanded: !story.expanded },
-                    ...prev.slice(index + 1),
-                  ];
-                })
-              }
-            >
-              {story.expanded ? "Hide" : "Show"}
+  return (
+    <div className="max-w-xl mx-auto mt-10 p-4 space-y-6">
+      <Card>
+        <CardContent className="p-6 space-y-4">
+          <h2 className="text-xl font-bold">Podcast Title</h2>
+          <div className="flex items-center justify-between space-x-4">
+            <Button variant="ghost" onClick={rewind}>
+              <RotateCcw />
+            </Button>
+            <Button variant="ghost" onClick={togglePlay}>
+              {isPlaying ? <Pause /> : <Play />}
+            </Button>
+            <Button variant="ghost" onClick={fastForward}>
+              <RotateCw />
             </Button>
           </div>
-        </CardTitle>
-      </CardHeader>
-      {story.expanded && (
-        <CardContent className="p-6">
-          <div className="mt-6">
-            <HackerNewsSummary story={story} />
+          <Slider
+            value={[timestamp]}
+            max={3600}
+            step={1}
+            onValueChange={(val) => handleSliderChange(val[0])}
+          />
+          <div className="flex justify-center pt-2">
+            <Button onClick={toggleAI}>
+              {aiActive ? <X className="mr-2" /> : <Mic className="mr-2" />}
+              {aiActive ? "Stop AI" : "Ask AI About Podcast"}
+            </Button>
           </div>
         </CardContent>
-      )}
-    </Card>
-  ));
-};
-
-export default AudioTranscriptPlayer;
+      </Card>
+    </div>
+  );
+}
