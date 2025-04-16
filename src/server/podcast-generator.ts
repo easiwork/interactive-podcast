@@ -15,7 +15,7 @@ const client = new ElevenLabsClient({
 
 export interface PodcastGenerationResult {
   script: string;
-  audioFiles: string[];
+  audioFile: string;
   notes: string[];
   stories: Story[];
 }
@@ -307,7 +307,7 @@ export async function generateFullPodcast(
 
   const result: PodcastGenerationResult = {
     script,
-    audioFiles: [`/podcasts/${today}/podcast.mp3`],
+    audioFile: `/podcasts/${today}/podcast.mp3`,
     notes: articleNotes.map((notes) => notes.notes),
     stories,
   };

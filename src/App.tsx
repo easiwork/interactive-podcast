@@ -10,8 +10,18 @@ import { useRealtimeSession } from "./components/useRealtimeSession";
 import { DebugPage } from "./components/DebugPage";
 
 const NUM_STORIES = 10;
+const API_BASE_URL =
+  process.env.NODE_ENV === "development" ? "http://localhost:3000" : "";
+
 interface StoryMetadata extends Story {
   expanded: boolean;
+}
+
+interface PodcastMetadata {
+  script: string;
+  audioFiles: string[];
+  notes: string[];
+  stories: Story[];
 }
 
 export default function App() {
@@ -20,8 +30,35 @@ export default function App() {
   const [aiActive, setAiActive] = useState(false);
   const [duration, setDuration] = useState(0);
   const [showDebug, setShowDebug] = useState(false);
+  const [podcastMetadata, setPodcastMetadata] =
+    useState<PodcastMetadata | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const audioRef = useRef<HTMLAudioElement>(null);
   const { startSession, stopSession, isSessionActive } = useRealtimeSession();
+
+  useEffect(() => {
+    const loadTodaysPodcast = async () => {
+      try {
+        const today = new Date().toISOString().split("T")[0];
+        const response = await fetch(
+          `${API_BASE_URL}/podcasts/${today}/metadata.json`
+        );
+        if (response.ok) {
+          const metadata = await response.json();
+          setPodcastMetadata(metadata);
+          if (audioRef.current) {
+            audioRef.current.src = `${API_BASE_URL}${metadata.audioFile}`;
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load today's podcast:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadTodaysPodcast();
+  }, []);
 
   useEffect(() => {
     // Initialize audio element
@@ -109,42 +146,52 @@ export default function App() {
 
   return (
     <div className="max-w-xl mx-auto mt-10 p-4 space-y-6">
-      <audio ref={audioRef} src="test.mp3" />
+      <audio ref={audioRef} />
       <Card>
         <CardContent className="p-6 space-y-4">
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-bold">Podcast Title</h2>
+            <h2 className="text-xl font-bold">
+              {isLoading
+                ? "Loading..."
+                : podcastMetadata
+                  ? "Today's Hacker News Podcast"
+                  : "No podcast available"}
+            </h2>
             <Button variant="outline" onClick={() => setShowDebug(!showDebug)}>
               {showDebug ? "Hide Debug" : "Show Debug"}
             </Button>
           </div>
-          <div className="flex items-center justify-between space-x-4">
-            <Button variant="ghost" onClick={rewind}>
-              <RotateCcw />
-            </Button>
-            <Button variant="ghost" onClick={togglePlay}>
-              {isPlaying ? <Pause /> : <Play />}
-            </Button>
-            <Button variant="ghost" onClick={fastForward}>
-              <RotateCw />
-            </Button>
-          </div>
-          <Slider
-            value={[timestamp]}
-            max={duration}
-            step={1}
-            onValueChange={(val) => handleSliderChange(val[0])}
-          />
-          <div className="flex justify-between text-sm text-gray-500">
-            <span>{formatTime(timestamp)}</span>
-            <span>{formatTime(duration)}</span>
-          </div>
-          <div className="flex justify-center pt-2">
-            <Button onClick={toggleAI}>
-              {aiActive ? <X className="mr-2" /> : <Mic className="mr-2" />}
-              {aiActive ? "Stop AI" : "Ask AI About Podcast"}
-            </Button>
-          </div>
+          {podcastMetadata && (
+            <>
+              <div className="flex items-center justify-between space-x-4">
+                <Button variant="ghost" onClick={rewind}>
+                  <RotateCcw />
+                </Button>
+                <Button variant="ghost" onClick={togglePlay}>
+                  {isPlaying ? <Pause /> : <Play />}
+                </Button>
+                <Button variant="ghost" onClick={fastForward}>
+                  <RotateCw />
+                </Button>
+              </div>
+              <Slider
+                value={[timestamp]}
+                max={duration}
+                step={1}
+                onValueChange={(val) => handleSliderChange(val[0])}
+              />
+              <div className="flex justify-between text-sm text-gray-500">
+                <span>{formatTime(timestamp)}</span>
+                <span>{formatTime(duration)}</span>
+              </div>
+              <div className="flex justify-center pt-2">
+                <Button onClick={toggleAI}>
+                  {aiActive ? <X className="mr-2" /> : <Mic className="mr-2" />}
+                  {aiActive ? "Stop AI" : "Ask AI About Podcast"}
+                </Button>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
