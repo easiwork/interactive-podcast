@@ -4,6 +4,10 @@ import path from "node:path";
 import fs from "node:fs";
 import { VoiceOption } from "./server";
 import { Story, fetchTopHNStories } from "./hacker-news";
+import { exec } from "child_process";
+import { promisify } from "util";
+
+const execAsync = promisify(exec);
 
 const client = new ElevenLabsClient({
   apiKey: process.env.ELEVENLABS_API_KEY,
@@ -130,6 +134,57 @@ const VOICE_MAP: Record<string, string> = {
   "Host 2": "UgBBYS2sOqTuMpoF3BR0", // Mark - Natural Conversations
 } as const;
 
+export async function combineAudioFiles(
+  audioFiles: string[],
+  outputPath: string
+): Promise<void> {
+  console.log(`[Podcast Generator] Combining ${audioFiles.length} audio files`);
+
+  // Ensure output path has a filename with extension
+  if (!outputPath.endsWith(".mp3")) {
+    outputPath = path.join(outputPath, "podcast.mp3");
+  }
+
+  // Ensure the directory exists
+  const outputDir = path.dirname(outputPath);
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
+  }
+
+  const fileListPath = path.join(path.dirname(outputPath), "files.txt");
+
+  // Create a file list for ffmpeg
+  const fileList = audioFiles.map((file) => `file '${file}'`).join("\n");
+  await fs.promises.writeFile(fileListPath, fileList);
+
+  try {
+    // Use ffmpeg to concatenate all audio files
+    await execAsync(
+      `ffmpeg -f concat -safe 0 -i ${fileListPath} -c copy ${outputPath}`
+    );
+    console.log(
+      `[Podcast Generator] Successfully combined audio files into ${outputPath}`
+    );
+  } catch (error) {
+    console.error(`[Podcast Generator] Failed to combine audio files:`, error);
+    throw new Error("Failed to combine audio files");
+  }
+
+  try {
+    // Clean up temporary files
+    for (const file of audioFiles) {
+      await fs.promises.unlink(file);
+    }
+    await fs.promises.unlink(fileListPath);
+    console.log(`[Podcast Generator] Cleaned up temporary files`);
+  } catch (error) {
+    console.error(
+      `[Podcast Generator] Failed to clean up temporary files:`,
+      error
+    );
+  }
+}
+
 export async function generateFullPodcast(
   storyCount: number = 5
 ): Promise<PodcastGenerationResult> {
@@ -215,7 +270,7 @@ export async function generateFullPodcast(
 
   // Split script into lines and generate audio for each line
   const scriptLines = script.split(/[\n\r]+/).filter((line) => line.trim());
-  const audioFiles: string[] = [];
+  const tempAudioFiles: string[] = [];
   console.log(
     `[Podcast Generator] Starting audio generation for ${scriptLines.length} lines`
   );
@@ -231,12 +286,12 @@ export async function generateFullPodcast(
         `[Podcast Generator] Generating audio for line ${i + 1}/${scriptLines.length} (${host})`
       );
       const audioBuffer = await createAudioFromText(text, voiceId);
-      const filename = `${i}.mp3`;
+      const filename = `temp_${i}.mp3`;
       const filepath = path.join(todayDir, filename);
 
       await fs.promises.writeFile(filepath, audioBuffer);
-      audioFiles.push(`/podcasts/${today}/${filename}`);
-      console.log(`[Podcast Generator] Saved audio file ${filename}`);
+      tempAudioFiles.push(filepath);
+      console.log(`[Podcast Generator] Saved temporary audio file ${filename}`);
     } catch (error) {
       console.error(
         `[Podcast Generator] Failed to generate audio for line ${i}:`,
@@ -246,9 +301,13 @@ export async function generateFullPodcast(
     }
   }
 
+  // Combine all audio files into one
+  const combinedAudioPath = path.join(todayDir, "podcast.mp3");
+  await combineAudioFiles(tempAudioFiles, combinedAudioPath);
+
   const result: PodcastGenerationResult = {
     script,
-    audioFiles,
+    audioFiles: [`/podcasts/${today}/podcast.mp3`],
     notes: articleNotes.map((notes) => notes.notes),
     stories,
   };
