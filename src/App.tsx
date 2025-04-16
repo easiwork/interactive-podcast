@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Pause, Play, RotateCcw, RotateCw, Mic, X } from "lucide-react";
 import { useRealtimeSession } from "./components/useRealtimeSession";
+import { DebugPage } from "./components/DebugPage";
 
 const NUM_STORIES = 10;
 interface StoryMetadata extends Story {
@@ -18,6 +19,7 @@ export default function App() {
   const [timestamp, setTimestamp] = useState(0);
   const [aiActive, setAiActive] = useState(false);
   const [duration, setDuration] = useState(0);
+  const [showDebug, setShowDebug] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const { startSession, stopSession, isSessionActive } = useRealtimeSession();
 
@@ -110,7 +112,12 @@ export default function App() {
       <audio ref={audioRef} src="test.mp3" />
       <Card>
         <CardContent className="p-6 space-y-4">
-          <h2 className="text-xl font-bold">Podcast Title</h2>
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-bold">Podcast Title</h2>
+            <Button variant="outline" onClick={() => setShowDebug(!showDebug)}>
+              {showDebug ? "Hide Debug" : "Show Debug"}
+            </Button>
+          </div>
           <div className="flex items-center justify-between space-x-4">
             <Button variant="ghost" onClick={rewind}>
               <RotateCcw />
@@ -140,6 +147,8 @@ export default function App() {
           </div>
         </CardContent>
       </Card>
+
+      {showDebug && <DebugPage />}
     </div>
   );
 }
