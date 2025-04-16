@@ -170,19 +170,19 @@ export async function combineAudioFiles(
     throw new Error("Failed to combine audio files");
   }
 
-  try {
-    // Clean up temporary files
-    for (const file of audioFiles) {
-      await fs.promises.unlink(file);
-    }
-    await fs.promises.unlink(fileListPath);
-    console.log(`[Podcast Generator] Cleaned up temporary files`);
-  } catch (error) {
-    console.error(
-      `[Podcast Generator] Failed to clean up temporary files:`,
-      error
-    );
-  }
+  //   try {
+  //     // Clean up temporary files
+  //     for (const file of audioFiles) {
+  //       await fs.promises.unlink(file);
+  //     }
+  //     await fs.promises.unlink(fileListPath);
+  //     console.log(`[Podcast Generator] Cleaned up temporary files`);
+  //   } catch (error) {
+  //     console.error(
+  //       `[Podcast Generator] Failed to clean up temporary files:`,
+  //       error
+  //     );
+  //   }
 }
 
 export async function generateFullPodcast(
