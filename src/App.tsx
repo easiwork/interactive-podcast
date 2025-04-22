@@ -5,9 +5,19 @@ import { fetchHNStory, Story } from "./components/hacker-news-api";
 import { fetchHNTopStories } from "./components/hacker-news-api";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Pause, Play, RotateCcw, RotateCw, Mic, X } from "lucide-react";
+import {
+  Pause,
+  Play,
+  RotateCcw,
+  RotateCw,
+  Mic,
+  X,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { useRealtimeSession } from "./components/useRealtimeSession";
 import { DebugPage } from "./components/DebugPage";
+import { realtimePrompt } from "./realtime-prompt";
 
 const NUM_STORIES = 10;
 const API_BASE_URL =
@@ -19,7 +29,7 @@ interface StoryMetadata extends Story {
 
 interface PodcastMetadata {
   script: string;
-  audioFiles: string[];
+  audioFile: string;
   notes: string[];
   stories: Story[];
 }
@@ -28,37 +38,50 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [timestamp, setTimestamp] = useState(0);
   const [aiActive, setAiActive] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
   const [duration, setDuration] = useState(0);
   const [showDebug, setShowDebug] = useState(false);
   const [podcastMetadata, setPodcastMetadata] =
     useState<PodcastMetadata | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const audioRef = useRef<HTMLAudioElement>(null);
-  const { startSession, stopSession, isSessionActive } = useRealtimeSession();
+  const { startSession, stopSession, isSessionActive, updateSession } =
+    useRealtimeSession();
+
+  const loadPodcastForDate = async (date: Date) => {
+    setIsLoading(true);
+    try {
+      const dateStr = date.toISOString().split("T")[0];
+      const response = await fetch(
+        `${API_BASE_URL}/podcasts/${dateStr}/metadata.json`
+      );
+      if (response.ok) {
+        const metadata = await response.json();
+        setPodcastMetadata(metadata);
+        if (audioRef.current) {
+          audioRef.current.src = `${API_BASE_URL}${metadata.audioFile}`;
+        }
+      } else {
+        setPodcastMetadata(null);
+      }
+    } catch (error) {
+      console.error("Failed to load podcast:", error);
+      setPodcastMetadata(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const loadTodaysPodcast = async () => {
-      try {
-        const today = new Date().toISOString().split("T")[0];
-        const response = await fetch(
-          `${API_BASE_URL}/podcasts/${today}/metadata.json`
-        );
-        if (response.ok) {
-          const metadata = await response.json();
-          setPodcastMetadata(metadata);
-          if (audioRef.current) {
-            audioRef.current.src = `${API_BASE_URL}${metadata.audioFile}`;
-          }
-        }
-      } catch (error) {
-        console.error("Failed to load today's podcast:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    loadPodcastForDate(selectedDate);
+  }, [selectedDate]);
 
-    loadTodaysPodcast();
-  }, []);
+  const navigateDate = (days: number) => {
+    const newDate = new Date(selectedDate);
+    newDate.setDate(newDate.getDate() + days);
+    setSelectedDate(newDate);
+  };
 
   useEffect(() => {
     // Initialize audio element
@@ -124,11 +147,14 @@ export default function App() {
     if (newAiActive) {
       setIsPlaying(false);
       audioRef.current?.pause();
+      setAiLoading(true);
       try {
         await startSession();
       } catch (error) {
         console.error("Failed to start AI session:", error);
         setAiActive(false);
+      } finally {
+        setAiLoading(false);
       }
     } else {
       stopSession();
@@ -143,6 +169,17 @@ export default function App() {
       setAiActive(false);
     }
   }, [isSessionActive]);
+
+  useEffect(() => {
+    // Pass the podcast notes as context to the session
+    if (isSessionActive && podcastMetadata?.notes) {
+      updateSession({
+        instructions: `${realtimePrompt}
+# Podcast Notes
+${podcastMetadata.notes.join("\n\n")}`,
+      });
+    }
+  }, [isSessionActive, podcastMetadata]);
 
   return (
     <div className="max-w-xl mx-auto mt-10 p-4 space-y-6">
@@ -161,6 +198,21 @@ export default function App() {
               {showDebug ? "Hide Debug" : "Show Debug"}
             </Button>
           </div>
+
+          <div className="flex items-center justify-between space-x-4">
+            <Button variant="ghost" onClick={() => navigateDate(-1)}>
+              <ChevronLeft className="w-4 h-4 mr-1" />
+              Previous Day
+            </Button>
+            <div className="text-sm font-medium">
+              {selectedDate.toLocaleDateString()}
+            </div>
+            <Button variant="ghost" onClick={() => navigateDate(1)}>
+              Next Day
+              <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          </div>
+
           {podcastMetadata && (
             <>
               <div className="flex items-center justify-between space-x-4">
@@ -185,9 +237,24 @@ export default function App() {
                 <span>{formatTime(duration)}</span>
               </div>
               <div className="flex justify-center pt-2">
-                <Button onClick={toggleAI}>
-                  {aiActive ? <X className="mr-2" /> : <Mic className="mr-2" />}
-                  {aiActive ? "Stop AI" : "Ask AI About Podcast"}
+                <Button
+                  onClick={toggleAI}
+                  disabled={aiLoading}
+                  className={aiLoading ? "opacity-50" : ""}
+                >
+                  {aiLoading ? (
+                    <>Starting AI...</>
+                  ) : aiActive ? (
+                    <>
+                      <X className="mr-2" />
+                      Stop AI
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="mr-2" />
+                      Ask AI About Podcast
+                    </>
+                  )}
                 </Button>
               </div>
             </>

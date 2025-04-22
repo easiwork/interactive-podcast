@@ -102,7 +102,11 @@ export const useRealtimeSession = () => {
     sendClientEvent({ type: "response.create" });
   }
 
-  function updateSession(sessionProps: any) {
+  function updateSession(
+    sessionProps: {
+      instructions?: string;
+    } & Record<string, any>
+  ) {
     const event = {
       type: "session.update",
       session: sessionProps,
@@ -129,12 +133,9 @@ export const useRealtimeSession = () => {
 
   return {
     isSessionActive,
-    events,
-    dataChannel,
     startSession,
     stopSession,
     updateSession,
-    sendClientEvent,
     sendTextMessage,
   };
 };

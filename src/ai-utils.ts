@@ -1,17 +1,8 @@
 import { ArticleData } from "@extractus/article-extractor";
 import transcript from "./transcript";
+import { realtimePrompt } from "./realtime-prompt";
 
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
-
-const prompt = `you're analyzing a podcast transcript. the user paused the podcast at a specific timestamp and has some questions about what was said so far. your job is to reply with precise, on-topic answers. don't mention the show's name, the time paused, or any random filler. just respond directly to whatever the user wants to know from the transcript.
-if the user asks something like “what's the main argument,” give a concise statement of that argument. if they say “who's speaking,” just say who it is. no disclaimers, no fluff. if there's not enough info, be honest and say you don't know. otherwise, keep it short and straightforward
-example Q&A style:
-user: “did they talk about climate change or was it just politics?”
-assistant: “they spent most of the time on climate change and only briefly mentioned a few political updates.”
-user: “who's the sponsor for the show?”
-assistant: “it's sponsored by XYZ solutions.”
-that's it. remember—only relevant details from the transcript.
-`;
 
 export const getHost = () => {
   if (import.meta.env.DEV) {
@@ -21,7 +12,7 @@ export const getHost = () => {
   return "";
 };
 
-const EPHEMERAL_KEY_URL = `${getHost()}/api/get-ephemeral-key`;
+const EPHEMERAL_KEY_URL = `${getHost()}/get-ephemeral-key`;
 
 export async function getEphemeralKey() {
   const tokenResponse = await fetch(EPHEMERAL_KEY_URL, {
@@ -29,7 +20,7 @@ export async function getEphemeralKey() {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({ prompt: realtimePrompt }),
   });
 
   const data = await tokenResponse.json();
