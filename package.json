@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "copy": "cp -r dist/* /var/www/hackercast.club/",
+    "build-and-copy": "bun run build && bun run copy",
     "lint": "eslint .",
     "preview": "vite preview",
     "server:dev": "NODE_ENV=development bun --watch src/server/server.ts",
