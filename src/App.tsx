@@ -21,7 +21,7 @@ import { realtimePrompt } from "./realtime-prompt";
 
 const NUM_STORIES = 10;
 const API_BASE_URL =
-  process.env.NODE_ENV === "development" ? "http://localhost:3000" : "";
+  process.env.NODE_ENV === "development" ? "http://localhost:3000" : "api";
 
 interface StoryMetadata extends Story {
   expanded: boolean;

@@ -158,11 +158,11 @@ router.post("/generate-podcast", async (req, res) => {
   }
 });
 
-// if (process.env.NODE_ENV !== "development") {
-app.use("/", router);
-// } else {
-//   app.use("/api", router);
-// }
+if (process.env.NODE_ENV !== "development") {
+  app.use("/", router);
+} else {
+  app.use("/api", router);
+}
 
 // Handle 404 for unknown routes
 app.use((_, res) => {
