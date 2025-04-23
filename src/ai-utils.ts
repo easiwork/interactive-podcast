@@ -9,7 +9,7 @@ export const getHost = () => {
     return "http://localhost:3000";
   }
 
-  return "";
+  return "api";
 };
 
 const EPHEMERAL_KEY_URL = `${getHost()}/get-ephemeral-key`;
