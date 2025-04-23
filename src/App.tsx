@@ -45,6 +45,7 @@ export default function App() {
     useState<PodcastMetadata | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const audioRef = useRef<HTMLAudioElement>(null);
   const { startSession, stopSession, isSessionActive, updateSession } =
     useRealtimeSession();
@@ -181,6 +182,13 @@ ${podcastMetadata.notes.join("\n\n")}`,
     }
   }, [isSessionActive, podcastMetadata]);
 
+  const setSpeed = (speed: number) => {
+    setPlaybackSpeed(speed);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = speed;
+    }
+  };
+
   return (
     <div className="max-w-xl mx-auto mt-10 p-4 space-y-6">
       <audio ref={audioRef} />
@@ -235,6 +243,29 @@ ${podcastMetadata.notes.join("\n\n")}`,
               <div className="flex justify-between text-sm text-gray-500">
                 <span>{formatTime(timestamp)}</span>
                 <span>{formatTime(duration)}</span>
+              </div>
+              <div className="flex justify-center space-x-2">
+                <Button
+                  variant={playbackSpeed === 1 ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSpeed(1)}
+                >
+                  1x
+                </Button>
+                <Button
+                  variant={playbackSpeed === 1.5 ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSpeed(1.5)}
+                >
+                  1.5x
+                </Button>
+                <Button
+                  variant={playbackSpeed === 2 ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSpeed(2)}
+                >
+                  2x
+                </Button>
               </div>
               <div className="flex justify-center pt-2">
                 <Button
