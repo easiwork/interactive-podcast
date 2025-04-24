@@ -244,24 +244,43 @@ export async function generateFullPodcast(
     console.log(
       `[Podcast Generator] Processing story ${index + 1}/${stories.length}: ${story.title}`
     );
-    const articleData = await extract(story.url);
-    if (!articleData) {
-      console.error(
-        `[Podcast Generator] Failed to extract article data from ${story.url}`
+    try {
+      const articleData = await extract(story.url);
+      if (!articleData) {
+        console.error(
+          `[Podcast Generator] Failed to extract article data from ${story.url}, skipping this story`
+        );
+        return null;
+      }
+      console.log(
+        `[Podcast Generator] Generating notes for story ${index + 1}`
       );
-      throw new Error(`Failed to extract article data from ${story.url}`);
+      const notes = await generatePodcastNotes(articleData);
+      return {
+        url: story.url,
+        notes,
+        title: story.title,
+      };
+    } catch (error) {
+      console.error(
+        `[Podcast Generator] Error processing story ${story.title}:`,
+        error
+      );
+      return null;
     }
-    console.log(`[Podcast Generator] Generating notes for story ${index + 1}`);
-    const notes = await generatePodcastNotes(articleData);
-    return {
-      url: story.url,
-      notes,
-      title: story.title,
-    };
   });
 
-  const articleNotes = await Promise.all(articleNotesPromises);
-  console.log(`[Podcast Generator] Completed note generation for all stories`);
+  const articleNotes = (await Promise.all(articleNotesPromises)).filter(
+    (notes): notes is NonNullable<typeof notes> => notes !== null
+  );
+
+  if (articleNotes.length === 0) {
+    throw new Error("Failed to extract any articles successfully");
+  }
+
+  console.log(
+    `[Podcast Generator] Completed note generation for ${articleNotes.length} stories`
+  );
 
   // Generate script from all notes
   console.log(`[Podcast Generator] Generating podcast script`);
