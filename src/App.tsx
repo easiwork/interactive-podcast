@@ -14,10 +14,16 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  Link,
 } from "lucide-react";
 import { useRealtimeSession } from "./components/useRealtimeSession";
 import { DebugPage } from "./components/DebugPage";
 import { realtimePrompt } from "./realtime-prompt";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 const NUM_STORIES = 10;
 const API_BASE_URL =
@@ -196,15 +202,8 @@ ${podcastMetadata.notes.join("\n\n")}`,
         <CardContent className="p-6 space-y-4">
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-bold">
-              {isLoading
-                ? "Loading..."
-                : podcastMetadata
-                  ? "Today's Hacker News Podcast"
-                  : "No podcast available"}
+              {"Today's Hacker News Podcast"}
             </h2>
-            <Button variant="outline" onClick={() => setShowDebug(!showDebug)}>
-              {showDebug ? "Hide Debug" : "Show Debug"}
-            </Button>
           </div>
 
           <div className="flex items-center justify-between space-x-4">
@@ -288,6 +287,28 @@ ${podcastMetadata.notes.join("\n\n")}`,
                   )}
                 </Button>
               </div>
+
+              <Collapsible>
+                <CollapsibleTrigger className="flex items-center space-x-2 text-sm text-gray-500 hover:text-gray-700">
+                  <Link className="w-4 h-4" />
+                  <span>Source Articles</span>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-2">
+                  <div className="space-y-2">
+                    {podcastMetadata.stories.map((story, index) => (
+                      <a
+                        key={index}
+                        href={story.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                      >
+                        {story.title}
+                      </a>
+                    ))}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             </>
           )}
         </CardContent>
