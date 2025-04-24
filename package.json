@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "server:dev": "NODE_ENV=development bun --watch src/server/server.ts",
     "server:prod": "bun src/server/server.ts",
-    "dev:all": "concurrently --names web,server \"bun run dev\" \"bun run server:dev\""
+    "dev:all": "concurrently --names web,server \"bun run dev\" \"bun run server:dev\"",
+    "generate-podcast": "bun run src/scripts/generate-podcast.ts"
   },
   "dependencies": {
     "@11labs/client": "^0.0.5",
