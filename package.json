@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "server:dev": "NODE_ENV=development bun --watch src/server/server.ts",
-    "server:prod": "bun src/server/server.ts"
+    "server:prod": "bun src/server/server.ts",
+    "dev:all": "bun run dev & bun run server:dev"
   },
   "dependencies": {
     "@11labs/client": "^0.0.5",
