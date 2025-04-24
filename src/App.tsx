@@ -210,13 +210,13 @@ ${podcastMetadata.notes.join("\n\n")}`,
           <div className="flex items-center justify-between space-x-4">
             <Button variant="ghost" onClick={() => navigateDate(-1)}>
               <ChevronLeft className="w-4 h-4 mr-1" />
-              Previous Day
+              Previous
             </Button>
             <div className="text-sm font-medium">
               {selectedDate.toLocaleDateString()}
             </div>
             <Button variant="ghost" onClick={() => navigateDate(1)}>
-              Next Day
+              Next
               <ChevronRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
