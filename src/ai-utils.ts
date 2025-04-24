@@ -6,7 +6,7 @@ const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
 
 export const getHost = () => {
   if (import.meta.env.DEV) {
-    return "http://localhost:3000";
+    return "http://localhost:3000/api";
   }
 
   return "api";

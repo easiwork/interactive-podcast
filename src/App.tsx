@@ -27,7 +27,7 @@ import {
 
 const NUM_STORIES = 10;
 const API_BASE_URL =
-  process.env.NODE_ENV === "development" ? "http://localhost:3000" : "api";
+  process.env.NODE_ENV === "development" ? "http://localhost:3000/api" : "api";
 
 interface StoryMetadata extends Story {
   expanded: boolean;
@@ -55,6 +55,23 @@ export default function App() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const { startSession, stopSession, isSessionActive, updateSession } =
     useRealtimeSession();
+
+  const isToday = (date: Date) => {
+    const today = new Date();
+    return (
+      date.getDate() === today.getDate() &&
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear()
+    );
+  };
+
+  const getPodcastTitle = () => {
+    if (isLoading) return "Loading...";
+    if (!podcastMetadata) return "No podcast available";
+    return isToday(selectedDate)
+      ? "Today's Hacker News Podcast"
+      : `Hacker News Podcast - ${selectedDate.toLocaleDateString()}`;
+  };
 
   const loadPodcastForDate = async (date: Date) => {
     setIsLoading(true);
@@ -200,11 +217,7 @@ ${podcastMetadata.notes.join("\n\n")}`,
       <audio ref={audioRef} />
       <Card>
         <CardContent className="p-6 space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-bold">
-              {"Today's Hacker News Podcast"}
-            </h2>
-          </div>
+          <h2 className="text-xl font-bold">{getPodcastTitle()}</h2>
 
           <div className="flex items-center justify-between space-x-4">
             <Button variant="ghost" onClick={() => navigateDate(-1)}>
@@ -289,7 +302,7 @@ ${podcastMetadata.notes.join("\n\n")}`,
               </div>
 
               <Collapsible>
-                <CollapsibleTrigger className="flex items-center space-x-2 text-sm text-gray-500 hover:text-gray-700">
+                <CollapsibleTrigger className="flex items-center space-x-2 text-sm text-gray-500 hover:text-gray-700 cursor-pointer">
                   <Link className="w-4 h-4" />
                   <span>Source Articles</span>
                 </CollapsibleTrigger>

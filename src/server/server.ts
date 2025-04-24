@@ -40,7 +40,7 @@ app.use(express.json());
 app.use(cors());
 
 // Serve static files from the podcasts directory
-app.use("/podcasts", express.static(path.join(process.cwd(), "podcasts")));
+router.use("/podcasts", express.static(path.join(process.cwd(), "podcasts")));
 
 export type VoiceOption = "Rachel" | "Daniel";
 
