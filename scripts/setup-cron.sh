@@ -16,18 +16,31 @@ TEMP_CRONTAB=$(mktemp)
 crontab -l > "$TEMP_CRONTAB" 2>/dev/null || echo "" > "$TEMP_CRONTAB"
 
 # Check if the cron job already exists
-if ! grep -q "$SCRIPT_PATH" "$TEMP_CRONTAB"; then
-  # Add the new cron job to run at 7:55 PM daily
-  echo "55 19 * * * BUN_PATH=\"$BUN_PATH\" $SCRIPT_PATH" >> "$TEMP_CRONTAB"
-  
-  # Install the new crontab
-  crontab "$TEMP_CRONTAB"
-  
-  echo "Cron job has been set up successfully."
-  echo "The podcast will be generated daily at 7:55 PM."
-else
+if grep -q "$SCRIPT_PATH" "$TEMP_CRONTAB"; then
   echo "Cron job already exists."
+  
+  # Ask if user wants to overwrite
+  read -p "Do you want to overwrite the existing cron job? (y/n): " OVERWRITE
+  
+  if [[ "$OVERWRITE" == "y" || "$OVERWRITE" == "Y" ]]; then
+    # Remove the existing cron job
+    sed -i "\|$SCRIPT_PATH|d" "$TEMP_CRONTAB"
+    echo "Existing cron job removed."
+  else
+    echo "Keeping existing cron job. Exiting."
+    rm "$TEMP_CRONTAB"
+    exit 0
+  fi
 fi
+
+# Add the new cron job to run at 7:55 PM daily
+echo "55 19 * * * BUN_PATH=\"$BUN_PATH\" $SCRIPT_PATH" >> "$TEMP_CRONTAB"
+
+# Install the new crontab
+crontab "$TEMP_CRONTAB"
+
+echo "Cron job has been set up successfully."
+echo "The podcast will be generated daily at 7:55 PM."
 
 # Clean up
 rm "$TEMP_CRONTAB" 
