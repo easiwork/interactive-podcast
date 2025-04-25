@@ -17,14 +17,14 @@ crontab -l > "$TEMP_CRONTAB" 2>/dev/null || echo "" > "$TEMP_CRONTAB"
 
 # Check if the cron job already exists
 if ! grep -q "$SCRIPT_PATH" "$TEMP_CRONTAB"; then
-  # Add the new cron job to run at 2 PM daily
-  echo "0 14 * * * BUN_PATH=\"$BUN_PATH\" $SCRIPT_PATH" >> "$TEMP_CRONTAB"
+  # Add the new cron job to run at 7:55 PM daily
+  echo "55 19 * * * BUN_PATH=\"$BUN_PATH\" $SCRIPT_PATH" >> "$TEMP_CRONTAB"
   
   # Install the new crontab
   crontab "$TEMP_CRONTAB"
   
   echo "Cron job has been set up successfully."
-  echo "The podcast will be generated daily at 2:00 PM."
+  echo "The podcast will be generated daily at 7:55 PM."
 else
   echo "Cron job already exists."
 fi
