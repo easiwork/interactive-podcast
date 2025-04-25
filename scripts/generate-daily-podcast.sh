@@ -3,6 +3,9 @@
 # Set the working directory to the project root
 cd "$(dirname "$0")/.."
 
+# Get the absolute path to Bun
+BUN_PATH=$(which bun)
+
 # Load environment variables from .env file if it exists
 if [ -f .env ]; then
   export $(cat .env | grep -v '^#' | xargs)
@@ -17,9 +20,9 @@ mkdir -p logs
 # Log the start of the process
 echo "Starting podcast generation at $(date)" > "$LOG_FILE"
 
-# Run the podcast generation using Bun
+# Run the podcast generation using Bun with absolute path
 echo "Running podcast generation..." >> "$LOG_FILE"
-bun run src/scripts/generate-podcast.ts >> "$LOG_FILE" 2>&1
+"$BUN_PATH" run src/scripts/generate-podcast.ts >> "$LOG_FILE" 2>&1
 
 # Check if the generation was successful
 if [ $? -eq 0 ]; then

@@ -3,6 +3,9 @@
 # Get the absolute path to the generate-daily-podcast.sh script
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/generate-daily-podcast.sh"
 
+# Get the absolute path to Bun
+BUN_PATH=$(which bun)
+
 # Make the script executable
 chmod +x "$SCRIPT_PATH"
 
@@ -15,7 +18,7 @@ crontab -l > "$TEMP_CRONTAB" 2>/dev/null || echo "" > "$TEMP_CRONTAB"
 # Check if the cron job already exists
 if ! grep -q "$SCRIPT_PATH" "$TEMP_CRONTAB"; then
   # Add the new cron job to run at 2 PM daily
-  echo "0 14 * * * $SCRIPT_PATH" >> "$TEMP_CRONTAB"
+  echo "0 14 * * * BUN_PATH=\"$BUN_PATH\" $SCRIPT_PATH" >> "$TEMP_CRONTAB"
   
   # Install the new crontab
   crontab "$TEMP_CRONTAB"
