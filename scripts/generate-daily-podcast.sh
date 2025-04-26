@@ -6,7 +6,9 @@ timezone="America/New_York"
 cd "$(dirname "$0")/.."
 
 # Get the absolute path to Bun
-BUN_PATH=$(which bun)
+if [ -z "$BUN_PATH" ]; then
+  BUN_PATH=$(which bun)
+fi
 
 # Load environment variables from .env file if it exists
 if [ -f .env ]; then
