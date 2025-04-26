@@ -33,14 +33,14 @@ if grep -q "$SCRIPT_PATH" "$TEMP_CRONTAB"; then
   fi
 fi
 
-# Add the new cron job to run at 8:00 PM EST (1:00 AM UTC)
-echo "4 1 * * * BUN_PATH=\"$BUN_PATH\" $SCRIPT_PATH" >> "$TEMP_CRONTAB"
+# Add the new cron job to run at 2:00 PM EDT (6:00 PM UTC)
+echo "0 18 * * * BUN_PATH=\"$BUN_PATH\" $SCRIPT_PATH" >> "$TEMP_CRONTAB"
 
 # Install the new crontab
 crontab "$TEMP_CRONTAB"
 
 echo "Cron job has been set up successfully."
-echo "The podcast will be generated daily at 8:00 PM EST (1:00 AM UTC)."
+echo "The podcast will be generated daily at 2:00 PM EDT (6:00 PM UTC)."
 
 # Clean up
 rm "$TEMP_CRONTAB" 
