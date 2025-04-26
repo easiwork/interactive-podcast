@@ -10,9 +10,14 @@ if [ -z "$BUN_PATH" ]; then
   BUN_PATH=$(which bun)
 fi
 
-# Load environment variables from .env file if it exists
-if [ -f .env ]; then
-  export $(cat .env | grep -v '^#' | xargs)
+if [ -z "$ELEVENLABS_API_KEY" ]; then
+  echo "ELEVEN_LABS_API_KEY is not set"
+  exit 1
+fi
+
+if [ -z "$OPENAI_API_KEY" ]; then
+  echo "OPENAI_API_KEY is not set"
+  exit 1
 fi
 
 # Log file for the cron job
