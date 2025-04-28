@@ -9,6 +9,42 @@ import { promisify } from "util";
 
 const execAsync = promisify(exec);
 
+// Simple logging utility with timestamps in NY timezone
+const logger = {
+  formatTimestamp: () => {
+    const now = new Date();
+    // Format: YYYY-MM-DD HH:MM:SS.mmm
+    const dateStr = now
+      .toLocaleString("en-US", {
+        timeZone: "America/New_York",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      })
+      .replace(",", "");
+
+    // Add milliseconds manually
+    const ms = now.getMilliseconds().toString().padStart(3, "0");
+    return `${dateStr}.${ms}`;
+  },
+  info: (message: string) => {
+    const timestamp = logger.formatTimestamp();
+    console.log(`[${timestamp}] [Podcast Generator] ${message}`);
+  },
+  error: (message: string, error?: any) => {
+    const timestamp = logger.formatTimestamp();
+    console.error(`[${timestamp}] [Podcast Generator] ${message}`, error || "");
+  },
+  warn: (message: string) => {
+    const timestamp = logger.formatTimestamp();
+    console.warn(`[${timestamp}] [Podcast Generator] ${message}`);
+  },
+};
+
 const client = new ElevenLabsClient({
   apiKey: process.env.ELEVENLABS_API_KEY,
 });
@@ -146,7 +182,7 @@ export async function combineAudioFiles(
   audioFiles: string[],
   outputPath: string
 ): Promise<void> {
-  console.log(`[Podcast Generator] Combining ${audioFiles.length} audio files`);
+  logger.info(`Combining ${audioFiles.length} audio files`);
 
   // Ensure output path has a filename with extension
   if (!outputPath.endsWith(".mp3")) {
@@ -170,11 +206,9 @@ export async function combineAudioFiles(
     await execAsync(
       `ffmpeg -f concat -safe 0 -i ${fileListPath} -c copy ${outputPath}`
     );
-    console.log(
-      `[Podcast Generator] Successfully combined audio files into ${outputPath}`
-    );
+    logger.info(`Successfully combined audio files into ${outputPath}`);
   } catch (error) {
-    console.error(`[Podcast Generator] Failed to combine audio files:`, error);
+    logger.error(`Failed to combine audio files:`, error);
     throw new Error("Failed to combine audio files");
   }
 
@@ -197,9 +231,7 @@ export async function generateFullPodcast(
   storyCount: number = 5,
   forceRegenerate: boolean = false
 ): Promise<PodcastGenerationResult> {
-  console.log(
-    `[Podcast Generator] Starting podcast generation for ${storyCount} stories`
-  );
+  logger.info(`Starting podcast generation for ${storyCount} stories`);
 
   // Check if podcast already exists for today
   const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
@@ -207,69 +239,57 @@ export async function generateFullPodcast(
   const todayDir = path.join(podcastsDir, today);
   const metadataPath = path.join(todayDir, "metadata.json");
 
-  console.log(
-    `[Podcast Generator] Checking for existing podcast in ${todayDir}`
-  );
+  logger.info(`Checking for existing podcast in ${todayDir}`);
 
   // Create podcasts directory if it doesn't exist
   if (!fs.existsSync(podcastsDir)) {
-    console.log(
-      `[Podcast Generator] Creating podcasts directory at ${podcastsDir}`
-    );
+    logger.info(`Creating podcasts directory at ${podcastsDir}`);
     fs.mkdirSync(podcastsDir, { recursive: true });
   }
 
   // Create today's directory if it doesn't exist
   if (!fs.existsSync(todayDir)) {
-    console.log(
-      `[Podcast Generator] Creating today's directory at ${todayDir}`
-    );
+    logger.info(`Creating today's directory at ${todayDir}`);
     fs.mkdirSync(todayDir, { recursive: true });
   }
 
   // Check if today's podcast already exists
   if (fs.existsSync(metadataPath) && !forceRegenerate) {
-    console.log(
-      `[Podcast Generator] Found existing podcast for ${today}, returning cached result`
-    );
+    logger.info(`Found existing podcast for ${today}, returning cached result`);
     const existingPodcast = JSON.parse(fs.readFileSync(metadataPath, "utf-8"));
     return existingPodcast;
   }
 
   if (forceRegenerate && fs.existsSync(metadataPath)) {
-    console.log(
-      `[Podcast Generator] Force regenerate flag set. Overwriting existing podcast for ${today}.`
+    logger.info(
+      `Force regenerate flag set. Overwriting existing podcast for ${today}.`
     );
   }
 
-  console.log(
-    `[Podcast Generator] No existing podcast found or force regenerate requested, generating new one`
+  logger.info(
+    `No existing podcast found or force regenerate requested, generating new one`
   );
 
   // Fetch top HN stories
-  console.log(`[Podcast Generator] Fetching top ${storyCount} HN stories`);
+  logger.info(`Fetching top ${storyCount} HN stories`);
   const stories = await fetchTopHNStories(storyCount);
-  console.log(`[Podcast Generator] Fetched ${stories.length} stories`);
+  logger.info(`Fetched ${stories.length} stories`);
 
   // Extract article data and generate notes for all stories
-  console.log(
-    `[Podcast Generator] Starting article extraction and note generation`
-  );
+  logger.info(`Starting article extraction and note generation`);
   const articleNotesPromises = stories.map(async (story, index) => {
-    console.log(
-      `[Podcast Generator] Processing story ${index + 1}/${stories.length}: ${story.title}`
+    logger.info(
+      `Processing story ${index + 1}/${stories.length}: ${story.title}`
     );
     try {
       const articleData = await extract(story.url);
       if (!articleData) {
-        console.error(
-          `[Podcast Generator] Failed to extract article data from ${story.url}, skipping this story`
+        logger.error(
+          `Failed to extract article data from ${story.url}, skipping this story`
         );
         return null;
       }
-      console.log(
-        `[Podcast Generator] Generating notes for story ${index + 1}`
-      );
+      logger.info(`Generating notes for story ${index + 1}`);
       const notes = await generatePodcastNotes(articleData);
       return {
         url: story.url,
@@ -277,10 +297,7 @@ export async function generateFullPodcast(
         title: story.title,
       };
     } catch (error) {
-      console.error(
-        `[Podcast Generator] Error processing story ${story.title}:`,
-        error
-      );
+      logger.error(`Error processing story ${story.title}:`, error);
       return null;
     }
   });
@@ -293,21 +310,17 @@ export async function generateFullPodcast(
     throw new Error("Failed to extract any articles successfully");
   }
 
-  console.log(
-    `[Podcast Generator] Completed note generation for ${articleNotes.length} stories`
-  );
+  logger.info(`Completed note generation for ${articleNotes.length} stories`);
 
   // Generate script from all notes
-  console.log(`[Podcast Generator] Generating podcast script`);
+  logger.info(`Generating podcast script`);
   const script = await generatePodcastScriptFromNotes(articleNotes);
-  console.log(`[Podcast Generator] Script generated successfully`);
+  logger.info(`Script generated successfully`);
 
   // Split script into lines and generate audio for each line
   const scriptLines = script.split(/[\n\r]+/).filter((line) => line.trim());
   const tempAudioFiles: string[] = [];
-  console.log(
-    `[Podcast Generator] Starting audio generation for ${scriptLines.length} lines`
-  );
+  logger.info(`Starting audio generation for ${scriptLines.length} lines`);
 
   // Generate audio for each line
   for (let i = 0; i < scriptLines.length; i++) {
@@ -316,8 +329,8 @@ export async function generateFullPodcast(
     const voiceId = VOICE_MAP[host];
 
     try {
-      console.log(
-        `[Podcast Generator] Generating audio for line ${i + 1}/${scriptLines.length} (${host})`
+      logger.info(
+        `Generating audio for line ${i + 1}/${scriptLines.length} (${host})`
       );
       const audioBuffer = await createAudioFromText(text, voiceId);
       const filename = `temp_${i}.mp3`;
@@ -325,12 +338,9 @@ export async function generateFullPodcast(
 
       await fs.promises.writeFile(filepath, audioBuffer);
       tempAudioFiles.push(filepath);
-      console.log(`[Podcast Generator] Saved temporary audio file ${filename}`);
+      logger.info(`Saved temporary audio file ${filename}`);
     } catch (error) {
-      console.error(
-        `[Podcast Generator] Failed to generate audio for line ${i}:`,
-        error
-      );
+      logger.error(`Failed to generate audio for line ${i}:`, error);
       throw new Error(`Failed to generate audio for line ${i}`);
     }
   }
@@ -347,9 +357,9 @@ export async function generateFullPodcast(
   };
 
   // Save the podcast metadata
-  console.log(`[Podcast Generator] Saving podcast metadata`);
+  logger.info(`Saving podcast metadata`);
   await fs.promises.writeFile(metadataPath, JSON.stringify(result, null, 2));
-  console.log(`[Podcast Generator] Podcast generation completed successfully`);
+  logger.info(`Podcast generation completed successfully`);
 
   return result;
 }
