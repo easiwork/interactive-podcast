@@ -204,7 +204,7 @@ export async function combineAudioFiles(
   try {
     // Use ffmpeg to concatenate all audio files
     await execAsync(
-      `ffmpeg -f concat -safe 0 -i ${fileListPath} -c copy ${outputPath}`
+      `ffmpeg -f concat -safe 0 -i ${fileListPath} -c copy ${outputPath} -y`
     );
     logger.info(`Successfully combined audio files into ${outputPath}`);
   } catch (error) {
