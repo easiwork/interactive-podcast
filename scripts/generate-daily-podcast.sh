@@ -10,6 +10,19 @@ if [ -z "$BUN_PATH" ]; then
   BUN_PATH=$(which bun)
 fi
 
+# Parse command line arguments
+FORCE_REGENERATE=false
+for arg in "$@"; do
+  if [ "$arg" == "--force" ] || [ "$arg" == "-f" ]; then
+    FORCE_REGENERATE=true
+  fi
+done
+
+# Load environment variables from .env file if it exists
+if [ -f .env ]; then
+  export $(cat .env | grep -v '^#' | xargs)
+fi
+
 if [ -z "$ELEVENLABS_API_KEY" ]; then
   echo "ELEVEN_LABS_API_KEY is not set"
   exit 1
@@ -31,8 +44,12 @@ echo "Starting podcast generation at $(TZ=$timezone date)" > "$LOG_FILE"
 
 # Run the podcast generation using Bun with absolute path
 echo "Running podcast generation..." >> "$LOG_FILE"
-
-"$BUN_PATH" run src/scripts/generate-podcast.ts >> "$LOG_FILE" 2>&1
+if [ "$FORCE_REGENERATE" = true ]; then
+  echo "Force regenerate flag detected. Will overwrite existing podcast if it exists." >> "$LOG_FILE"
+  "$BUN_PATH" run src/scripts/generate-podcast.ts --force >> "$LOG_FILE" 2>&1
+else
+  "$BUN_PATH" run src/scripts/generate-podcast.ts >> "$LOG_FILE" 2>&1
+fi
 
 # Check if the generation was successful
 if [ $? -eq 0 ]; then

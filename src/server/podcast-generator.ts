@@ -194,7 +194,8 @@ export async function combineAudioFiles(
 }
 
 export async function generateFullPodcast(
-  storyCount: number = 5
+  storyCount: number = 5,
+  forceRegenerate: boolean = false
 ): Promise<PodcastGenerationResult> {
   console.log(
     `[Podcast Generator] Starting podcast generation for ${storyCount} stories`
@@ -227,7 +228,7 @@ export async function generateFullPodcast(
   }
 
   // Check if today's podcast already exists
-  if (fs.existsSync(metadataPath)) {
+  if (fs.existsSync(metadataPath) && !forceRegenerate) {
     console.log(
       `[Podcast Generator] Found existing podcast for ${today}, returning cached result`
     );
@@ -235,8 +236,14 @@ export async function generateFullPodcast(
     return existingPodcast;
   }
 
+  if (forceRegenerate && fs.existsSync(metadataPath)) {
+    console.log(
+      `[Podcast Generator] Force regenerate flag set. Overwriting existing podcast for ${today}.`
+    );
+  }
+
   console.log(
-    `[Podcast Generator] No existing podcast found, generating new one`
+    `[Podcast Generator] No existing podcast found or force regenerate requested, generating new one`
   );
 
   // Fetch top HN stories
