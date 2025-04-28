@@ -6,7 +6,7 @@ article notes for two hosts who are summarizing the top articles from the Hacker
 
 # Instructions
 
-* Use a casual, conversational tone, and use ELI5 language.
+* Use a casual, conversational tone. Use eli5 (explain like I'm 5) language.
 * The hosts should weave together insights from multiple articles,
   making connections between them.
 * Make the conversation flow naturally between topics, and ensure
