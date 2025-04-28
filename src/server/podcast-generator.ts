@@ -46,14 +46,22 @@ two hosts who are summarizing the top articles from the Hacker News site.
 The script should be a natural conversation between two hosts discussing these articles.
 The hosts should weave together insights from multiple articles, making connections between them.
 Do not include a sign off at the end.
+Make the conversation flow naturally between topics, and ensure both hosts contribute equally to the discussion.
+
+The tone should be casual and conversational - like a conversation between friends. For example, it could sound
+something like this:
+
+Host 1: Dude, did you hear about the blackout in Spain and Portugal?
+Host 2: No way, that's fucking crazy.
+Host 1: Apparently there's no internet and people are relying on radio for news.
+Host 2: Wild.
+
 The script should be in the following format:
 
 Host 1: <line_of_dialogue>
 Host 2: <line_of_dialogue>
 Host 1: <line_of_dialogue>
 Host 2: <line_of_dialogue>
-
-Make the conversation flow naturally between topics, and ensure both hosts contribute equally to the discussion.
 `,
         },
         {
