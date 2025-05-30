@@ -271,10 +271,6 @@ export default function App() {
         audioRef.current.pause();
       } else {
         audioRef.current.play();
-        if (aiActive) {
-          setAiActive(false);
-          stopSession();
-        }
       }
       setIsPlaying(!isPlaying);
     }
@@ -305,28 +301,93 @@ export default function App() {
     }
   };
 
-  const toggleAI = async () => {
-    const newAiActive = !aiActive;
-    setAiActive(newAiActive);
-
-    if (newAiActive) {
-      setIsPlaying(false);
-      audioRef.current?.pause();
+  // Add mouse/touch event handlers for push-to-talk
+  const handleMouseDown = async () => {
+    if (!aiActive && !aiLoading && podcastUrl) {
+      // Store current playback state
+      const wasPlaying = isPlaying;
+      if (wasPlaying) {
+        audioRef.current?.pause();
+      }
+      setAiActive(true);
       setAiLoading(true);
       try {
         await startSession();
+        setAiLoading(false);
       } catch (error) {
         console.error("Failed to start AI session:", error);
         setAiActive(false);
+        setError(error instanceof Error ? error.message : "Failed to start AI session. Please check your microphone permissions.");
+        // Resume playback if it was playing
+        if (wasPlaying) {
+          audioRef.current?.play();
+        }
       } finally {
         setAiLoading(false);
       }
-    } else {
-      stopSession();
-      setIsPlaying(true);
-      audioRef.current?.play();
     }
   };
+
+  const handleMouseUp = () => {
+    if (aiActive) {
+      stopSession();
+      setAiActive(false);
+    }
+  };
+
+  // Add event listeners for keyboard support
+  useEffect(() => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !aiActive && !aiLoading && podcastUrl) {
+        e.preventDefault();
+        const wasPlaying = isPlaying;
+        if (wasPlaying) {
+          audioRef.current?.pause();
+        }
+        setAiActive(true);
+        setAiLoading(true);
+        try {
+          await startSession();
+          setAiLoading(false);
+        } catch (error) {
+          console.error("Failed to start AI session:", error);
+          setAiActive(false);
+          setError(error instanceof Error ? error.message : "Failed to start AI session. Please check your microphone permissions.");
+          if (wasPlaying) {
+            audioRef.current?.play();
+          }
+        } finally {
+          setAiLoading(false);
+        }
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && aiActive) {
+        e.preventDefault();
+        stopSession();
+        setAiActive(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [aiActive, aiLoading, podcastUrl, isPlaying]);
+
+  // Add cleanup effect to ensure AI session is stopped when component unmounts
+  useEffect(() => {
+    return () => {
+      if (aiActive) {
+        stopSession();
+        setAiActive(false);
+      }
+    };
+  }, [aiActive]);
 
   // Sync AI session state with our local state
   useEffect(() => {
@@ -752,36 +813,32 @@ ${podcastMetadata.notes.join("\n\n")}`,
                   className="hidden"
                   src={podcastUrl || undefined}
                 />
-                <div className="flex items-center justify-between">
+                
+                {/* Central Microphone Button */}
+                <div className="flex justify-center mb-6">
                   <Button
                     variant="outline"
                     size="icon"
-                    onClick={rewind}
-                    disabled={!podcastUrl}
+                    onMouseDown={handleMouseDown}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={handleMouseUp}
+                    onTouchStart={handleMouseDown}
+                    onTouchEnd={handleMouseUp}
+                    disabled={!podcastUrl || aiLoading}
+                    className={`relative ${aiActive ? "bg-red-500 hover:bg-red-600" : ""} w-24 h-24 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110 shadow-lg`}
                   >
-                    <RotateCcw className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={togglePlay}
-                    disabled={!podcastUrl}
-                  >
-                    {isPlaying ? (
-                      <Pause className="h-4 w-4" />
+                    {aiLoading ? (
+                      <div className="animate-spin h-12 w-12 border-4 border-current border-t-transparent rounded-full" />
                     ) : (
-                      <Play className="h-4 w-4" />
+                      <div className="flex flex-col items-center">
+                        <Mic className="h-12 w-12" />
+                        <span className="text-sm mt-2 font-medium">{aiActive ? "Release to stop" : "Hold to talk"}</span>
+                      </div>
                     )}
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={fastForward}
-                    disabled={!podcastUrl}
-                  >
-                    <RotateCw className="h-4 w-4" />
-                  </Button>
                 </div>
+
+                {/* Progress Bar */}
                 <div className="flex items-center space-x-4">
                   <span className="text-sm text-gray-500">
                     {formatTime(timestamp)}
@@ -797,7 +854,44 @@ ${podcastMetadata.notes.join("\n\n")}`,
                     {formatTime(duration)}
                   </span>
                 </div>
-                <div className="flex items-center justify-between">
+
+                {/* Playback Controls */}
+                <div className="flex items-center justify-center space-x-4">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={rewind}
+                    disabled={!podcastUrl}
+                    className="w-12 h-12"
+                  >
+                    <RotateCcw className="h-6 w-6" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={togglePlay}
+                    disabled={!podcastUrl}
+                    className="w-16 h-16"
+                  >
+                    {isPlaying ? (
+                      <Pause className="h-8 w-8" />
+                    ) : (
+                      <Play className="h-8 w-8" />
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={fastForward}
+                    disabled={!podcastUrl}
+                    className="w-12 h-12"
+                  >
+                    <RotateCw className="h-6 w-6" />
+                  </Button>
+                </div>
+
+                {/* Playback Speed Controls */}
+                <div className="flex items-center justify-center space-x-2">
                   <Button
                     variant="outline"
                     size="sm"
