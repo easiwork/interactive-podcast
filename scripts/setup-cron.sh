@@ -35,14 +35,14 @@ if grep -q "$SCRIPT_PATH" "$TEMP_CRONTAB"; then
   fi
 fi
 
-# Add the new cron job to run at 2:00 PM EDT (6:00 PM UTC)
-echo "2 18 * * * BUN_PATH=\"$BUN_PATH\" ELEVENLABS_API_KEY=\"$ELEVENLABS_API_KEY\" OPENAI_API_KEY=\"$OPENAI_API_KEY\" $SCRIPT_PATH" >> "$TEMP_CRONTAB"
+# Add the new cron job to run at 2:02 PM local time
+echo "2 14 * * * BUN_PATH=\"$BUN_PATH\" ELEVENLABS_API_KEY=\"$ELEVENLABS_API_KEY\" OPENAI_API_KEY=\"$OPENAI_API_KEY\" $SCRIPT_PATH" >> "$TEMP_CRONTAB"
 
 # Install the new crontab
 crontab "$TEMP_CRONTAB"
 
 echo "Cron job has been set up successfully."
-echo "The podcast will be generated daily at 2:02 PM EDT (6:00 PM UTC)."
+echo "The podcast will be generated daily at 2:02 PM local time."
 
 # Clean up
 rm "$TEMP_CRONTAB" 

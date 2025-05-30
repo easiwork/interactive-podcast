@@ -1,4 +1,4 @@
-import express from "express";
+import express, { Request, Response } from "express";
 import cors from "cors";
 import { ElevenLabsClient } from "elevenlabs";
 import path from "node:path";
@@ -8,8 +8,11 @@ import {
   generateFullPodcast,
   generatePodcastNotes,
   generatePodcastScriptFromNotes,
+  getDirectPodcastAudio,
+  getDirectPodcastForPlayback,
 } from "./podcast-generator";
 import { fetchTopHNStories } from "./hacker-news";
+import fetch from 'node-fetch';
 
 const client = new ElevenLabsClient({
   apiKey: process.env.ELEVENLABS_API_KEY,
@@ -133,7 +136,10 @@ router.post("/debug/generate-script", async (_, res) => {
     });
 
     const articleNotes = await Promise.all(articleNotesPromises);
-    const script = await generatePodcastScriptFromNotes(articleNotes);
+    const script = await generatePodcastScriptFromNotes(articleNotes.map(notes => ({
+      ...notes,
+      contentType: 'text' as const
+    })));
 
     res.json({
       stories,
@@ -149,12 +155,164 @@ router.post("/debug/generate-script", async (_, res) => {
 // Endpoint for generating a full podcast
 router.post("/generate-podcast", async (req, res) => {
   try {
-    const { storyCount = 5 } = req.body as { storyCount?: number };
-    const result = await generateFullPodcast(storyCount);
-    res.json(result);
+    const { rssFeedUrl, storyCount } = req.body as { rssFeedUrl?: string; storyCount?: number };
+
+    let result;
+    if (rssFeedUrl) {
+      // Generate podcast from RSS feed
+      result = await generateFullPodcast(rssFeedUrl);
+    } else {
+      // Generate podcast from Hacker News
+      const stories = await fetchTopHNStories(storyCount || 5);
+      const articleNotesPromises = stories.map(async (story) => {
+        const articleData = await extract(story.url);
+        if (!articleData) {
+          throw new Error(`Failed to extract article data from ${story.url}`);
+        }
+        const notes = await generatePodcastNotes(articleData);
+        return {
+          url: story.url,
+          notes,
+          title: story.title,
+          contentType: 'text' as const
+        };
+      });
+
+      const articleNotes = await Promise.all(articleNotesPromises);
+      const script = await generatePodcastScriptFromNotes(articleNotes);
+      result = {
+        script,
+        audioFile: '', // This will be set by the podcast generator
+        notes: articleNotes.map((notes) => notes.notes),
+        feedItems: stories
+      };
+    }
+
+    // Handle direct playback URLs differently
+    if (result.audioFile.startsWith('http')) {
+      // For direct playback, use the URL as is
+      const feedItem = result.feedItems[0];
+      const feedInfo = 'feedInfo' in feedItem ? feedItem.feedInfo : undefined;
+      
+      res.json({
+        ...result,
+        isDirectPlayback: true,
+        directPlaybackInfo: {
+          title: result.script.replace('Direct podcast playback: ', ''),
+          audioUrl: result.audioFile,
+          feedInfo
+        }
+      });
+    } else {
+      // For generated podcasts, convert the file system path to a web-accessible URL
+      const relativePath = path.relative(process.cwd(), result.audioFile);
+      const audioUrl = `/${relativePath.replace(/\\/g, '/')}`;
+
+      res.json({
+        ...result,
+        audioFile: audioUrl,
+      });
+    }
   } catch (error) {
     console.error("Failed to generate podcast:", error);
     res.status(500).json({ error: "Failed to generate podcast" });
+  }
+});
+
+// Endpoint for direct podcast audio access with transcription
+router.post("/direct-podcast", async (req, res) => {
+  try {
+    const { rssFeedUrl, forceRegenerate } = req.body as { rssFeedUrl: string; forceRegenerate?: boolean };
+
+    if (!rssFeedUrl) {
+      res.status(400).json({ error: "RSS feed URL is required" });
+      return;
+    }
+
+    const result = await getDirectPodcastAudio(rssFeedUrl, forceRegenerate || false);
+
+    if (!result) {
+      res.status(404).json({ error: "No audio episodes found in the RSS feed" });
+      return;
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error("Failed to process direct podcast:", error);
+    res.status(500).json({ error: "Failed to process direct podcast" });
+  }
+});
+
+// Endpoint for simple podcast playback info (no transcription)
+router.post("/podcast-playback", async (req, res) => {
+  try {
+    const { rssFeedUrl, forceRegenerate } = req.body as { rssFeedUrl: string; forceRegenerate?: boolean };
+
+    if (!rssFeedUrl) {
+      res.status(400).json({ error: "RSS feed URL is required" });
+      return;
+    }
+
+    const result = await getDirectPodcastForPlayback(rssFeedUrl, forceRegenerate || false);
+
+    if (!result) {
+      res.status(404).json({ error: "No audio episodes found in the RSS feed" });
+      return;
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error("Failed to get podcast playback info:", error);
+    res.status(500).json({ error: "Failed to get podcast playback info" });
+  }
+});
+
+// Image proxy endpoint to handle CORS and 403 errors
+// @ts-ignore - TypeScript router signature issue
+router.get("/proxy-image", async (req, res) => {
+  const imageUrl = req.query.url as string;
+  
+  if (!imageUrl) {
+    return res.status(400).json({ error: "Image URL is required" });
+  }
+
+  try {
+    // Add more robust headers for favicon requests
+    const headers: Record<string, string> = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Referer': new URL(imageUrl).origin,
+    };
+
+    // Add specific headers for favicon requests
+    if (imageUrl.includes('favicon')) {
+      headers['Accept'] = 'image/x-icon,image/*,*/*;q=0.8';
+    }
+
+    const response = await fetch(imageUrl, { headers });
+
+    if (!response.ok) {
+      console.error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+      return res.status(404).json({ error: "Image not found" });
+    }
+
+    // Get the image as a buffer
+    const imageBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(imageBuffer);
+
+    // Forward the content type
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Content-Length', buffer.length);
+    
+    // Send the buffer
+    res.send(buffer);
+
+  } catch (error) {
+    console.error('Error proxying image:', error);
+    res.status(500).json({ error: "Failed to fetch image" });
   }
 });
 

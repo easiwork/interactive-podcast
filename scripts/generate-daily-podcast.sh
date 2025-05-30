@@ -34,7 +34,7 @@ if [ -z "$OPENAI_API_KEY" ]; then
 fi
 
 # Log file for the cron job
-LOG_FILE="logs/podcast-generation-$(date +%Y-%m-%d).log"
+LOG_FILE="logs/podcast-generation-$(TZ=$timezone date +%Y-%m-%d).log"
 
 # Create logs directory if it doesn't exist
 mkdir -p logs
