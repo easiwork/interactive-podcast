@@ -24,13 +24,16 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { SourceSelector, Source, defaultSources } from './components/SourceSelector';
-import DOMPurify from 'dompurify';
+import {
+  SourceSelector,
+  Source,
+  defaultSources,
+} from "./components/SourceSelector";
+import DOMPurify from "dompurify";
 
 const NUM_STORIES = 10;
 const API_BASE_URL =
   process.env.NODE_ENV === "development" ? "http://localhost:3000/api" : "api";
-
 
 interface StoryMetadata extends Story {
   expanded: boolean;
@@ -113,6 +116,18 @@ interface DirectPlaybackInfo {
   }>;
 }
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth < 768 : false
+  );
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+  return isMobile;
+}
+
 export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [timestamp, setTimestamp] = useState(0);
@@ -131,14 +146,21 @@ export default function App() {
   const { startSession, stopSession, isSessionActive, updateSession } =
     useRealtimeSession();
   const [sources, setSources] = useState<Source[]>(defaultSources);
-  const [selectedSource, setSelectedSource] = useState<Source>(defaultSources[0]);
+  const [selectedSource, setSelectedSource] = useState<Source>(
+    defaultSources[0]
+  );
   const [isGenerating, setIsGenerating] = useState(false);
   const [podcastUrl, setPodcastUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPodcastFeed, setIsPodcastFeed] = useState(false);
   const [feedTitle, setFeedTitle] = useState<string>("");
-  const [processedFeeds, setProcessedFeeds] = useState<Record<string, PodcastMetadata>>({});
+  const [processedFeeds, setProcessedFeeds] = useState<
+    Record<string, PodcastMetadata>
+  >({});
   const descriptionRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
+  const [mobilePlayerOpen, setMobilePlayerOpen] = useState(false);
+  const [hostNames, setHostNames] = useState<string[]>(["Roshan", "Nathaniel"]);
 
   const isToday = (date: Date) => {
     const today = new Date();
@@ -154,18 +176,18 @@ export default function App() {
   };
 
   function getSourceId(source: Source) {
-    if (source.id === 'hackernews') return 'https___news_ycombinator_com_rss';
-    if (source.id === 'npr') return 'https___feeds_npr_org_1001_rss_xml';
-    return source.url.replace(/[^a-zA-Z0-9]/g, '_');
+    if (source.id === "hackernews") return "https___news_ycombinator_com_rss";
+    if (source.id === "npr") return "https___feeds_npr_org_1001_rss_xml";
+    return source.url.replace(/[^a-zA-Z0-9]/g, "_");
   }
 
   const processFeed = async (source: Source) => {
     try {
-      console.log('Processing feed:', source.url);
+      console.log("Processing feed:", source.url);
       const response = await fetch(`${API_BASE_URL}/generate-podcast`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           rssFeedUrl: source.url,
@@ -173,60 +195,62 @@ export default function App() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to generate podcast');
+        throw new Error("Failed to generate podcast");
       }
 
       const data = await response.json();
-      console.log('Feed processed:', data);
-      
-      setProcessedFeeds(prev => ({
+      console.log("Feed processed:", data);
+
+      setProcessedFeeds((prev) => ({
         ...prev,
-        [source.id]: data
+        [source.id]: data,
       }));
 
       // If this is the currently selected source, update the UI
       if (source.id === selectedSource.id) {
         if (data.isDirectPlayback && data.directPlaybackInfo) {
-          console.log('Updating UI with direct playback data');
+          console.log("Updating UI with direct playback data");
           setIsPodcastFeed(true);
           setPodcastUrl(data.directPlaybackInfo.audioUrl);
-          
+
           // Ensure all required fields are present
           const directPlaybackInfo = {
             title: data.directPlaybackInfo.title,
             audioUrl: data.directPlaybackInfo.audioUrl,
-            pubDate: data.directPlaybackInfo.pubDate || new Date().toLocaleString(),
-            description: data.directPlaybackInfo.description || data.notes?.[0] || '',
+            pubDate:
+              data.directPlaybackInfo.pubDate || new Date().toLocaleString(),
+            description:
+              data.directPlaybackInfo.description || data.notes?.[0] || "",
             imageUrl: data.directPlaybackInfo.imageUrl,
             faviconUrl: data.directPlaybackInfo.faviconUrl,
-            feedInfo: data.directPlaybackInfo.feedInfo ?
-            {
-                title: data.directPlaybackInfo.feedInfo.title || source.name,
-                imageUrl: data.directPlaybackInfo.feedInfo.imageUrl,
-                link: data.directPlaybackInfo.feedInfo.link || source.url,
-                itunes: data.directPlaybackInfo.feedInfo.itunes
-            } :
-            {
-              title: source.name,
-              imageUrl: data.directPlaybackInfo.imageUrl,
-              link: source.url
-            }
+            feedInfo: data.directPlaybackInfo.feedInfo
+              ? {
+                  title: data.directPlaybackInfo.feedInfo.title || source.name,
+                  imageUrl: data.directPlaybackInfo.feedInfo.imageUrl,
+                  link: data.directPlaybackInfo.feedInfo.link || source.url,
+                  itunes: data.directPlaybackInfo.feedInfo.itunes,
+                }
+              : {
+                  title: source.name,
+                  imageUrl: data.directPlaybackInfo.imageUrl,
+                  link: source.url,
+                },
           };
 
           setFeedTitle(directPlaybackInfo.feedInfo.title || source.name);
           setPodcastMetadata({
             ...data,
             isDirectPlayback: true,
-            directPlaybackInfo
+            directPlaybackInfo,
           });
         } else {
-          console.log('Updating UI with regular playback data');
+          console.log("Updating UI with regular playback data");
           setIsPodcastFeed(false);
           setPodcastUrl(`${API_BASE_URL}${data.audioFile}`);
           setPodcastMetadata(data);
         }
       }
-      
+
       return data;
     } catch (err) {
       console.error(`Failed to process feed ${source.name}:`, err);
@@ -240,7 +264,7 @@ export default function App() {
       setIsGenerating(true);
       try {
         // Process feeds in parallel
-        await Promise.all(sources.map(source => processFeed(source)));
+        await Promise.all(sources.map((source) => processFeed(source)));
       } finally {
         setIsGenerating(false);
       }
@@ -317,7 +341,11 @@ export default function App() {
       } catch (error) {
         console.error("Failed to start AI session:", error);
         setAiActive(false);
-        setError(error instanceof Error ? error.message : "Failed to start AI session. Please check your microphone permissions.");
+        setError(
+          error instanceof Error
+            ? error.message
+            : "Failed to start AI session. Please check your microphone permissions."
+        );
         // Resume playback if it was playing
         if (wasPlaying) {
           audioRef.current?.play();
@@ -338,7 +366,7 @@ export default function App() {
   // Add event listeners for keyboard support
   useEffect(() => {
     const handleKeyDown = async (e: KeyboardEvent) => {
-      if (e.code === 'Space' && !aiActive && !aiLoading && podcastUrl) {
+      if (e.code === "Space" && !aiActive && !aiLoading && podcastUrl) {
         e.preventDefault();
         const wasPlaying = isPlaying;
         if (wasPlaying) {
@@ -352,7 +380,11 @@ export default function App() {
         } catch (error) {
           console.error("Failed to start AI session:", error);
           setAiActive(false);
-          setError(error instanceof Error ? error.message : "Failed to start AI session. Please check your microphone permissions.");
+          setError(
+            error instanceof Error
+              ? error.message
+              : "Failed to start AI session. Please check your microphone permissions."
+          );
           if (wasPlaying) {
             audioRef.current?.play();
           }
@@ -363,19 +395,19 @@ export default function App() {
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && aiActive) {
+      if (e.code === "Space" && aiActive) {
         e.preventDefault();
         stopSession();
         setAiActive(false);
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
     };
   }, [aiActive, aiLoading, podcastUrl, isPlaying]);
 
@@ -417,53 +449,61 @@ ${podcastMetadata.notes.join("\n\n")}`,
   const handleSourceChange = (source: Source) => {
     setSelectedSource(source);
     setError(null);
-    
+
     // Use the preprocessed data if available
     const feedData = processedFeeds[source.id];
     if (feedData) {
-      console.log('Loading feed data:', feedData);
+      console.log("Loading feed data:", feedData);
       if (feedData.isDirectPlayback && feedData.directPlaybackInfo) {
-        console.log('Setting direct playback data:', feedData.directPlaybackInfo);
+        console.log(
+          "Setting direct playback data:",
+          feedData.directPlaybackInfo
+        );
         setIsPodcastFeed(true);
         setPodcastUrl(feedData.directPlaybackInfo.audioUrl);
-        
+
         // Ensure all required fields are present
         const directPlaybackInfo = {
           title: feedData.directPlaybackInfo.title,
           audioUrl: feedData.directPlaybackInfo.audioUrl,
-          pubDate: feedData.directPlaybackInfo.pubDate || new Date().toLocaleString(),
-          description: feedData.directPlaybackInfo.description || feedData.notes?.[0] || '',
+          pubDate:
+            feedData.directPlaybackInfo.pubDate || new Date().toLocaleString(),
+          description:
+            feedData.directPlaybackInfo.description ||
+            feedData.notes?.[0] ||
+            "",
           imageUrl: feedData.directPlaybackInfo.imageUrl,
           faviconUrl: feedData.directPlaybackInfo.faviconUrl,
-          feedInfo: feedData.directPlaybackInfo.feedInfo ?
-          {
-              title: feedData.directPlaybackInfo.feedInfo.title || source.name,
-              imageUrl: feedData.directPlaybackInfo.feedInfo.imageUrl,
-              link: feedData.directPlaybackInfo.feedInfo.link || source.url,
-              itunes: feedData.directPlaybackInfo.feedInfo.itunes
-          } :
-          {
-            title: source.name,
-            imageUrl: feedData.directPlaybackInfo.imageUrl,
-            link: source.url
-          }
+          feedInfo: feedData.directPlaybackInfo.feedInfo
+            ? {
+                title:
+                  feedData.directPlaybackInfo.feedInfo.title || source.name,
+                imageUrl: feedData.directPlaybackInfo.feedInfo.imageUrl,
+                link: feedData.directPlaybackInfo.feedInfo.link || source.url,
+                itunes: feedData.directPlaybackInfo.feedInfo.itunes,
+              }
+            : {
+                title: source.name,
+                imageUrl: feedData.directPlaybackInfo.imageUrl,
+                link: source.url,
+              },
         };
 
         setFeedTitle(directPlaybackInfo.feedInfo.title || source.name);
         setPodcastMetadata({
           ...feedData,
           isDirectPlayback: true,
-          directPlaybackInfo
+          directPlaybackInfo,
         });
         setExpandedDescription(false);
       } else {
-        console.log('Setting regular playback data');
+        console.log("Setting regular playback data");
         setIsPodcastFeed(false);
         setPodcastUrl(`${API_BASE_URL}${feedData.audioFile}`);
         setPodcastMetadata(feedData);
       }
     } else {
-      console.log('No processed data, processing feed...');
+      console.log("No processed data, processing feed...");
       // If feed hasn't been processed yet, process it now
       processFeed(source);
     }
@@ -472,13 +512,13 @@ ${podcastMetadata.notes.join("\n\n")}`,
   const handleAddCustomSource = async (url: string) => {
     let feedInfo: FeedInfo | null = null;
     try {
-      console.log('Starting custom feed addition:', url);
-      
+      console.log("Starting custom feed addition:", url);
+
       // First get feed info
       const response = await fetch(`${API_BASE_URL}/podcast-playback`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           rssFeedUrl: url,
@@ -486,12 +526,12 @@ ${podcastMetadata.notes.join("\n\n")}`,
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch feed information');
+        throw new Error("Failed to fetch feed information");
       }
 
       feedInfo = await response.json();
-      console.log('Feed info received:', feedInfo);
-      
+      console.log("Feed info received:", feedInfo);
+
       const feedTitle = feedInfo?.feedInfo?.title || new URL(url).hostname;
       const newSource: Source = {
         id: `custom-${Date.now()}`,
@@ -499,15 +539,15 @@ ${podcastMetadata.notes.join("\n\n")}`,
         url,
         description: url,
         isCustom: true,
-        imageUrl: feedInfo?.feedInfo?.imageUrl || feedInfo?.imageUrl
+        imageUrl: feedInfo?.feedInfo?.imageUrl || feedInfo?.imageUrl,
       };
 
       // Process the feed
-      console.log('Processing feed...');
+      console.log("Processing feed...");
       const processResponse = await fetch(`${API_BASE_URL}/generate-podcast`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           rssFeedUrl: url,
@@ -515,25 +555,25 @@ ${podcastMetadata.notes.join("\n\n")}`,
       });
 
       if (!processResponse.ok) {
-        throw new Error('Failed to process feed');
+        throw new Error("Failed to process feed");
       }
 
       const processedData = await processResponse.json();
-      console.log('Feed processed:', processedData);
+      console.log("Feed processed:", processedData);
 
       // Update all states in a single batch
       const updates = () => {
-        console.log('Updating states...');
-        setSources(prev => [...prev, newSource]);
+        console.log("Updating states...");
+        setSources((prev) => [...prev, newSource]);
         setSelectedSource(newSource);
-        setProcessedFeeds(prev => ({
+        setProcessedFeeds((prev) => ({
           ...prev,
-          [newSource.id]: processedData
+          [newSource.id]: processedData,
         }));
 
         // Always use the direct playback info from the initial feed info
         if (feedInfo?.audioUrl) {
-          console.log('Setting direct playback state');
+          console.log("Setting direct playback state");
           setIsPodcastFeed(true);
           setPodcastUrl(feedInfo.audioUrl);
           if (feedInfo.feedInfo?.title) {
@@ -547,61 +587,63 @@ ${podcastMetadata.notes.join("\n\n")}`,
               audioUrl: feedInfo.audioUrl,
               pubDate: feedInfo.pubDate,
               description: feedInfo.description,
-              feedInfo: feedInfo.feedInfo
-            }
+              feedInfo: feedInfo.feedInfo,
+            },
           });
         } else {
-          console.log('Setting regular playback state');
+          console.log("Setting regular playback state");
           setIsPodcastFeed(false);
           setPodcastUrl(`${API_BASE_URL}${processedData.audioFile}`);
           setPodcastMetadata(processedData);
         }
-        console.log('States updated');
+        console.log("States updated");
       };
 
       // Use setTimeout to ensure state updates happen in the next tick
       setTimeout(updates, 0);
-
     } catch (error) {
-      console.error('Failed to add custom source:', error);
+      console.error("Failed to add custom source:", error);
       const hostname = new URL(url).hostname;
       const newSource: Source = {
         id: `custom-${Date.now()}`,
         name: hostname,
         url,
         description: url,
-        isCustom: true
+        isCustom: true,
       };
 
       try {
-        console.log('Retrying feed processing...');
-        const processResponse = await fetch(`${API_BASE_URL}/generate-podcast`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            rssFeedUrl: url,
-          }),
-        });
+        console.log("Retrying feed processing...");
+        const processResponse = await fetch(
+          `${API_BASE_URL}/generate-podcast`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              rssFeedUrl: url,
+            }),
+          }
+        );
 
         if (processResponse.ok) {
           const processedData = await processResponse.json();
-          console.log('Feed processed on retry:', processedData);
+          console.log("Feed processed on retry:", processedData);
 
           // Update all states in a single batch
           const updates = () => {
-            console.log('Updating states on retry...');
-            setSources(prev => [...prev, newSource]);
+            console.log("Updating states on retry...");
+            setSources((prev) => [...prev, newSource]);
             setSelectedSource(newSource);
-            setProcessedFeeds(prev => ({
+            setProcessedFeeds((prev) => ({
               ...prev,
-              [newSource.id]: processedData
+              [newSource.id]: processedData,
             }));
 
             // Always use the direct playback info from the initial feed info
             if (feedInfo?.audioUrl) {
-              console.log('Setting direct playback state on retry');
+              console.log("Setting direct playback state on retry");
               setIsPodcastFeed(true);
               setPodcastUrl(feedInfo.audioUrl);
               if (feedInfo.feedInfo?.title) {
@@ -615,24 +657,24 @@ ${podcastMetadata.notes.join("\n\n")}`,
                   audioUrl: feedInfo.audioUrl,
                   pubDate: feedInfo.pubDate,
                   description: feedInfo.description,
-                  feedInfo: feedInfo.feedInfo
-                }
+                  feedInfo: feedInfo.feedInfo,
+                },
               });
             } else {
-              console.log('Setting regular playback state on retry');
+              console.log("Setting regular playback state on retry");
               setIsPodcastFeed(false);
               setPodcastUrl(`${API_BASE_URL}${processedData.audioFile}`);
               setPodcastMetadata(processedData);
             }
-            console.log('States updated on retry');
+            console.log("States updated on retry");
           };
 
           // Use setTimeout to ensure state updates happen in the next tick
           setTimeout(updates, 0);
         }
       } catch (processError) {
-        console.error('Failed to process feed:', processError);
-        setSources(prev => [...prev, newSource]);
+        console.error("Failed to process feed:", processError);
+        setSources((prev) => [...prev, newSource]);
         setSelectedSource(newSource);
       }
     }
@@ -654,15 +696,475 @@ ${podcastMetadata.notes.join("\n\n")}`,
     }
   }, [podcastMetadata?.directPlaybackInfo?.description]);
 
+  // Helper for artwork src
+  const getArtworkSrc = () => {
+    // Use same comprehensive image logic as the modal
+    const bestItemImage = podcastMetadata?.directPlaybackInfo?.imageUrl;
+    const feedChannelImage =
+      podcastMetadata?.directPlaybackInfo?.feedInfo?.imageUrl;
+    const firstFeedItemImage = podcastMetadata?.feedItems?.[0]?.imageUrl;
+    const firstFeedItemThumbnail =
+      podcastMetadata?.feedItems?.[0]?.thumbnailUrl;
+    const firstFeedItemEnclosure =
+      podcastMetadata?.feedItems?.[0]?.enclosure?.imageUrl;
+    const firstFeedItemItunes = podcastMetadata?.feedItems?.[0]?.itunes?.image;
+    const sourceSelectorImage = selectedSource?.imageUrl;
+    const faviconImage = podcastMetadata?.directPlaybackInfo?.faviconUrl;
+
+    const imgSrc =
+      bestItemImage ||
+      feedChannelImage ||
+      firstFeedItemImage ||
+      firstFeedItemThumbnail ||
+      firstFeedItemEnclosure ||
+      firstFeedItemItunes ||
+      sourceSelectorImage ||
+      faviconImage;
+
+    if (imgSrc) {
+      return `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(imgSrc)}`;
+    }
+    return "";
+  };
+
+  // --- MOBILE PLAYER FOOTER ---
+  if (isMobile) {
+    return (
+      <>
+        {/* Main content (list, etc) */}
+        <div className="pb-20 min-h-screen bg-gray-50">
+          <div className="max-w-4xl mx-auto p-4 space-y-6">
+            {/* Header Section */}
+            <div className="text-center py-6">
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                Podcast Jukebox
+              </h1>
+              <p className="text-sm text-gray-600">
+                Transform any feed or turn your regular podcasts into a
+                conversation with your hosts Roshan and Nathaniel
+              </p>
+            </div>
+
+            {/* Source Selector */}
+            <SourceSelector
+              sources={sources}
+              selectedSource={selectedSource}
+              onSourceChange={handleSourceChange}
+              onAddCustomSource={handleAddCustomSource}
+            />
+
+            {error && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-800">{error}</p>
+              </div>
+            )}
+
+            {isGenerating && (
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-blue-800">Processing feeds...</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Mobile Player Footer */}
+        <div
+          className={`fixed bottom-0 left-0 right-0 z-40 bg-white border-t flex items-center justify-between px-4 py-2 shadow-lg cursor-pointer ${
+            isPodcastFeed
+              ? "border-blue-200 bg-blue-50"
+              : "border-purple-200 bg-purple-50"
+          }`}
+          onClick={() => setMobilePlayerOpen(true)}
+        >
+          <div className="flex items-center">
+            {/* Content Type Indicator */}
+            <div
+              className={`w-3 h-3 rounded-full mr-2 flex-shrink-0 ${
+                isPodcastFeed ? "bg-blue-500" : "bg-purple-500"
+              }`}
+            />
+            {getArtworkSrc() && (
+              <img
+                src={getArtworkSrc()}
+                alt="artwork"
+                className="w-12 h-12 rounded object-cover mr-3"
+              />
+            )}
+            <div className="truncate max-w-[120px]">
+              <div className="font-medium text-sm truncate">
+                {podcastMetadata?.directPlaybackInfo?.title ||
+                  podcastMetadata?.directPlaybackInfo?.feedInfo?.title ||
+                  selectedSource?.name ||
+                  "Podcast Player"}
+              </div>
+              <div
+                className={`text-xs truncate ${
+                  isPodcastFeed ? "text-blue-600" : "text-purple-600"
+                }`}
+              >
+                {isPodcastFeed
+                  ? "🎧 Original Podcast"
+                  : `🤖 Personalized by ${hostNames.join(" and ")}`}
+              </div>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePlay();
+            }}
+            className="ml-2"
+          >
+            {isPlaying ? (
+              <Pause className="h-6 w-6" />
+            ) : (
+              <Play className="h-6 w-6" />
+            )}
+          </Button>
+        </div>
+
+        {/* Slide-up Player Modal */}
+        {mobilePlayerOpen && (
+          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-center mb-4">
+              <div
+                className="w-12 h-1.5 bg-gray-300 rounded-full cursor-pointer mt-3"
+                onClick={() => setMobilePlayerOpen(false)}
+              />
+            </div>
+
+            {/* Podcast Header with Image and Info */}
+            <div className="px-4 pb-4">
+              <div className="flex flex-col items-center space-y-4">
+                {/* Large Image Section */}
+                <div className="w-full max-w-sm aspect-square">
+                  {(() => {
+                    // Use same image logic as desktop
+                    const bestItemImage =
+                      podcastMetadata?.directPlaybackInfo?.imageUrl;
+                    const feedChannelImage =
+                      podcastMetadata?.directPlaybackInfo?.feedInfo?.imageUrl;
+                    const firstFeedItemImage =
+                      podcastMetadata?.feedItems?.[0]?.imageUrl;
+                    const firstFeedItemThumbnail =
+                      podcastMetadata?.feedItems?.[0]?.thumbnailUrl;
+                    const firstFeedItemEnclosure =
+                      podcastMetadata?.feedItems?.[0]?.enclosure?.imageUrl;
+                    const firstFeedItemItunes =
+                      podcastMetadata?.feedItems?.[0]?.itunes?.image;
+                    const sourceSelectorImage = selectedSource?.imageUrl;
+                    const faviconImage =
+                      podcastMetadata?.directPlaybackInfo?.faviconUrl;
+
+                    let imgSrc =
+                      bestItemImage ||
+                      feedChannelImage ||
+                      firstFeedItemImage ||
+                      firstFeedItemThumbnail ||
+                      firstFeedItemEnclosure ||
+                      firstFeedItemItunes ||
+                      sourceSelectorImage ||
+                      faviconImage;
+
+                    if (imgSrc) {
+                      const proxyUrl = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(imgSrc)}`;
+                      return (
+                        <img
+                          src={proxyUrl}
+                          alt={
+                            podcastMetadata?.directPlaybackInfo?.title ||
+                            "Podcast artwork"
+                          }
+                          className="w-full h-full rounded-2xl object-cover shadow-lg"
+                          onError={(e) => {
+                            const img = e.target as HTMLImageElement;
+                            img.style.display = "none";
+                          }}
+                        />
+                      );
+                    } else {
+                      return (
+                        <div className="w-full h-full bg-gray-100 rounded-2xl flex items-center justify-center shadow-lg">
+                          <div className="text-gray-400 text-center">
+                            <div className="w-24 h-24 mx-auto mb-2 bg-gray-200 rounded-full flex items-center justify-center">
+                              <Mic className="w-12 h-12" />
+                            </div>
+                            <p className="text-sm">No artwork available</p>
+                          </div>
+                        </div>
+                      );
+                    }
+                  })()}
+                </div>
+
+                {/* Title and Info Section */}
+                <div className="text-center space-y-2">
+                  {/* Content Type Badge */}
+                  <div
+                    className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                      isPodcastFeed
+                        ? "bg-blue-100 text-blue-800 border border-blue-200"
+                        : "bg-purple-100 text-purple-800 border border-purple-200"
+                    }`}
+                  >
+                    <div
+                      className={`w-2 h-2 rounded-full mr-2 ${
+                        isPodcastFeed ? "bg-blue-500" : "bg-purple-500"
+                      }`}
+                    />
+                    {isPodcastFeed
+                      ? "🎧 Original Podcast"
+                      : `🤖 Personalized by ${hostNames.join(" and ")}`}
+                  </div>
+                  <h1 className="text-xl font-bold text-gray-900">
+                    {podcastMetadata?.directPlaybackInfo?.title ||
+                      podcastMetadata?.directPlaybackInfo?.feedInfo?.title ||
+                      selectedSource?.name ||
+                      "Podcast Player"}
+                  </h1>
+                  {isPodcastFeed &&
+                    podcastMetadata?.directPlaybackInfo?.feedInfo?.title && (
+                      <div className="text-base font-normal text-gray-600">
+                        {podcastMetadata.directPlaybackInfo.feedInfo.title}
+                      </div>
+                    )}
+                  {isPodcastFeed &&
+                    podcastMetadata?.directPlaybackInfo?.pubDate && (
+                      <div className="text-sm text-gray-500">
+                        Published:{" "}
+                        {new Date(
+                          podcastMetadata.directPlaybackInfo.pubDate
+                        ).toLocaleDateString()}
+                      </div>
+                    )}
+                </div>
+
+                {/* Description Section */}
+                {isPodcastFeed &&
+                  podcastMetadata?.directPlaybackInfo?.description && (
+                    <div className="w-full">
+                      <div
+                        ref={descriptionRef}
+                        className={`text-sm text-gray-600 prose prose-sm max-w-none text-center ${!expandedDescription ? "line-clamp-3" : ""}`}
+                        dangerouslySetInnerHTML={{
+                          __html: DOMPurify.sanitize(
+                            podcastMetadata.directPlaybackInfo.description
+                          ),
+                        }}
+                      />
+                      {isTruncated && (
+                        <button
+                          onClick={() =>
+                            setExpandedDescription(!expandedDescription)
+                          }
+                          className="text-sm text-blue-600 hover:text-blue-800 mt-2 block mx-auto"
+                        >
+                          {expandedDescription ? "Show less" : "Read more"}
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                {/* Podcast Status Badge */}
+                {podcastMetadata && (
+                  <div className="w-full">
+                    <div
+                      className={`p-3 rounded-lg border ${
+                        isPodcastFeed
+                          ? "bg-blue-50 border-blue-200"
+                          : "bg-purple-50 border-purple-200"
+                      }`}
+                    >
+                      <div className="flex items-center justify-center space-x-3">
+                        <p
+                          className={`text-sm text-center ${
+                            isPodcastFeed ? "text-blue-800" : "text-purple-800"
+                          }`}
+                        >
+                          {isPodcastFeed
+                            ? "🎧 Playing original podcast audio directly"
+                            : `🤖 Personalized podcast by ${hostNames.join(" and ")}`}
+                        </p>
+                      </div>
+                      {isPodcastFeed &&
+                        podcastMetadata?.directPlaybackInfo?.feedInfo?.link && (
+                          <a
+                            href={
+                              podcastMetadata.directPlaybackInfo.feedInfo.link
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-600 hover:text-blue-800 mt-1 block text-center"
+                          >
+                            View original podcast →
+                          </a>
+                        )}
+                      {!isPodcastFeed && selectedSource?.url && (
+                        <a
+                          href={selectedSource.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-purple-600 hover:text-purple-800 mt-1 block text-center"
+                        >
+                          View original feed →
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Player Controls Section */}
+            <div className="px-4 pb-4">
+              <div className="space-y-4">
+                {/* Progress Bar */}
+                <div className="flex items-center space-x-4">
+                  <span className="text-sm text-gray-500">
+                    {formatTime(timestamp)}
+                  </span>
+                  <Slider
+                    value={[timestamp]}
+                    max={duration}
+                    step={1}
+                    onValueChange={(value) => handleSliderChange(value[0])}
+                    disabled={!podcastUrl}
+                  />
+                  <span className="text-sm text-gray-500">
+                    {formatTime(duration)}
+                  </span>
+                </div>
+
+                {/* Playback Controls */}
+                <div className="flex items-center justify-center space-x-4">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={rewind}
+                    disabled={!podcastUrl}
+                    className="w-12 h-12"
+                  >
+                    <RotateCcw className="h-6 w-6" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={togglePlay}
+                    disabled={!podcastUrl}
+                    className="w-16 h-16"
+                  >
+                    {isPlaying ? (
+                      <Pause className="h-8 w-8" />
+                    ) : (
+                      <Play className="h-8 w-8" />
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={fastForward}
+                    disabled={!podcastUrl}
+                    className="w-12 h-12"
+                  >
+                    <RotateCw className="h-6 w-6" />
+                  </Button>
+                </div>
+
+                {/* Playback Speed Controls */}
+                <div className="flex items-center justify-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSpeed(0.5)}
+                    disabled={!podcastUrl || playbackSpeed === 0.5}
+                  >
+                    0.5x
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSpeed(1)}
+                    disabled={!podcastUrl || playbackSpeed === 1}
+                  >
+                    1x
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSpeed(1.5)}
+                    disabled={!podcastUrl || playbackSpeed === 1.5}
+                  >
+                    1.5x
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSpeed(2)}
+                    disabled={!podcastUrl || playbackSpeed === 2}
+                  >
+                    2x
+                  </Button>
+                </div>
+
+                {/* AI Button */}
+                <div className="flex justify-center">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onMouseDown={handleMouseDown}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={handleMouseUp}
+                    onTouchStart={handleMouseDown}
+                    onTouchEnd={handleMouseUp}
+                    disabled={!podcastUrl || aiLoading}
+                    className={`relative ${aiActive ? "bg-red-500 hover:bg-red-600" : ""} w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg`}
+                  >
+                    {aiLoading ? (
+                      <div className="animate-spin h-10 w-10 border-4 border-current border-t-transparent rounded-full" />
+                    ) : (
+                      <div className="flex flex-col items-center">
+                        <Mic className="h-10 w-10" />
+                        <span className="text-xs mt-1 font-medium">
+                          {aiActive ? "Release" : "Hold to talk"}
+                        </span>
+                      </div>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Close Button */}
+            <div className="px-4 pb-4">
+              <Button
+                className="w-full"
+                variant="secondary"
+                onClick={() => setMobilePlayerOpen(false)}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Hidden audio element */}
+        <audio
+          ref={audioRef}
+          className="hidden"
+          src={podcastUrl || undefined}
+        />
+      </>
+    );
+  }
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">{getPodcastTitle()}</h1>
         <div className="flex space-x-4 hidden">
-          <Button
-            variant="outline"
-            onClick={() => setShowDebug(!showDebug)}
-          >
+          <Button variant="outline" onClick={() => setShowDebug(!showDebug)}>
             {showDebug ? "Hide Debug" : "Show Debug"}
           </Button>
         </div>
@@ -673,96 +1175,150 @@ ${podcastMetadata.notes.join("\n\n")}`,
           <Card>
             <CardHeader>
               <div className="flex flex-col md:flex-row items-center md:items-start space-y-4 md:space-y-0 md:space-x-4">
-                {isPodcastFeed && podcastMetadata?.directPlaybackInfo && (() => {
-                  // Check all possible image sources
-                  const bestItemImage = podcastMetadata.directPlaybackInfo.imageUrl; // This is already server-resolved best image
-                  const feedChannelImage = podcastMetadata.directPlaybackInfo.feedInfo?.imageUrl; // Specific feed/channel image
+                {isPodcastFeed &&
+                  podcastMetadata?.directPlaybackInfo &&
+                  (() => {
+                    // Check all possible image sources
+                    const bestItemImage =
+                      podcastMetadata.directPlaybackInfo.imageUrl; // This is already server-resolved best image
+                    const feedChannelImage =
+                      podcastMetadata.directPlaybackInfo.feedInfo?.imageUrl; // Specific feed/channel image
 
-                  // Fallbacks from feedItems array (less prioritised now)
-                  const firstFeedItemImage = podcastMetadata.feedItems?.[0]?.imageUrl;
-                  const firstFeedItemThumbnail = podcastMetadata.feedItems?.[0]?.thumbnailUrl;
-                  const firstFeedItemEnclosure = podcastMetadata.feedItems?.[0]?.enclosure?.imageUrl;
-                  const firstFeedItemItunes = podcastMetadata.feedItems?.[0]?.itunes?.image;
-                  
-                  const sourceSelectorImage = selectedSource?.imageUrl;
-                  const faviconImage = podcastMetadata.directPlaybackInfo.faviconUrl;
+                    // Fallbacks from feedItems array (less prioritised now)
+                    const firstFeedItemImage =
+                      podcastMetadata.feedItems?.[0]?.imageUrl;
+                    const firstFeedItemThumbnail =
+                      podcastMetadata.feedItems?.[0]?.thumbnailUrl;
+                    const firstFeedItemEnclosure =
+                      podcastMetadata.feedItems?.[0]?.enclosure?.imageUrl;
+                    const firstFeedItemItunes =
+                      podcastMetadata.feedItems?.[0]?.itunes?.image;
 
-                  console.log('Image sources for rendering:', {
-                    bestItemImage,
-                    feedChannelImage,
-                    firstFeedItemImage,
-                    firstFeedItemThumbnail,
-                    firstFeedItemEnclosure,
-                    firstFeedItemItunes,
-                    sourceSelectorImage,
-                    faviconImage
-                  });
+                    const sourceSelectorImage = selectedSource?.imageUrl;
+                    const faviconImage =
+                      podcastMetadata.directPlaybackInfo.faviconUrl;
 
-                  // Updated Prioritization:
-                  // 1. Server-resolved best image (episode or feed if episode had none)
-                  // 2. Specific Feed/Channel image from server
-                  // 3. Fallbacks from feedItems array (general item image, thumbnail, etc.)
-                  // 4. Image from SourceSelector component
-                  // 5. Favicon
-                  let imgSrc = bestItemImage || 
-                               feedChannelImage || 
-                               firstFeedItemImage || 
-                               firstFeedItemThumbnail || 
-                               firstFeedItemEnclosure || 
-                               firstFeedItemItunes || 
-                               sourceSelectorImage || 
-                               faviconImage;
+                    console.log("Image sources for rendering:", {
+                      bestItemImage,
+                      feedChannelImage,
+                      firstFeedItemImage,
+                      firstFeedItemThumbnail,
+                      firstFeedItemEnclosure,
+                      firstFeedItemItunes,
+                      sourceSelectorImage,
+                      faviconImage,
+                    });
 
-                  if (!imgSrc) return null;
-                  
-                  // Use the proxy endpoint for all images to handle CORS and 403 errors
-                  const proxyUrl = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(imgSrc)}`;
-                  
-                  return (
-                    <img
-                      src={proxyUrl}
-                      alt={podcastMetadata.directPlaybackInfo.title || "Podcast artwork"}
-                      className="w-48 h-48 md:w-24 md:h-24 rounded-lg object-cover flex-shrink-0 shadow-lg"
-                      onError={(e) => {
-                        const img = e.target as HTMLImageElement;
-                        // Try each fallback image source in order through the proxy
-                        if (img.src.includes(encodeURIComponent(bestItemImage || '')) && feedChannelImage) {
-                          img.src = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(feedChannelImage)}`;
-                        } else if (img.src.includes(encodeURIComponent(feedChannelImage || '')) && firstFeedItemImage) {
-                          img.src = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(firstFeedItemImage)}`;
-                        } else if (img.src.includes(encodeURIComponent(firstFeedItemImage || '')) && firstFeedItemThumbnail) {
-                          img.src = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(firstFeedItemThumbnail)}`;
-                        } else if (img.src.includes(encodeURIComponent(firstFeedItemThumbnail || '')) && firstFeedItemEnclosure) {
-                          img.src = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(firstFeedItemEnclosure)}`;
-                        } else if (img.src.includes(encodeURIComponent(firstFeedItemEnclosure || '')) && firstFeedItemItunes) {
-                          img.src = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(firstFeedItemItunes)}`;
-                        } else if (img.src.includes(encodeURIComponent(firstFeedItemItunes || '')) && sourceSelectorImage) {
-                          img.src = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(sourceSelectorImage)}`;
-                        } else if (img.src.includes(encodeURIComponent(sourceSelectorImage || '')) && faviconImage) {
-                          img.src = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(faviconImage)}`;
-                        } else {
-                          img.style.display = 'none';
+                    // Updated Prioritization:
+                    // 1. Server-resolved best image (episode or feed if episode had none)
+                    // 2. Specific Feed/Channel image from server
+                    // 3. Fallbacks from feedItems array (general item image, thumbnail, etc.)
+                    // 4. Image from SourceSelector component
+                    // 5. Favicon
+                    let imgSrc =
+                      bestItemImage ||
+                      feedChannelImage ||
+                      firstFeedItemImage ||
+                      firstFeedItemThumbnail ||
+                      firstFeedItemEnclosure ||
+                      firstFeedItemItunes ||
+                      sourceSelectorImage ||
+                      faviconImage;
+
+                    if (!imgSrc) return null;
+
+                    // Use the proxy endpoint for all images to handle CORS and 403 errors
+                    const proxyUrl = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(imgSrc)}`;
+
+                    return (
+                      <img
+                        src={proxyUrl}
+                        alt={
+                          podcastMetadata.directPlaybackInfo.title ||
+                          "Podcast artwork"
                         }
-                      }}
-                    />
-                  );
-                })()}
+                        className="w-48 h-48 md:w-24 md:h-24 rounded-lg object-cover flex-shrink-0 shadow-lg"
+                        onError={(e) => {
+                          const img = e.target as HTMLImageElement;
+                          // Try each fallback image source in order through the proxy
+                          if (
+                            img.src.includes(
+                              encodeURIComponent(bestItemImage || "")
+                            ) &&
+                            feedChannelImage
+                          ) {
+                            img.src = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(feedChannelImage)}`;
+                          } else if (
+                            img.src.includes(
+                              encodeURIComponent(feedChannelImage || "")
+                            ) &&
+                            firstFeedItemImage
+                          ) {
+                            img.src = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(firstFeedItemImage)}`;
+                          } else if (
+                            img.src.includes(
+                              encodeURIComponent(firstFeedItemImage || "")
+                            ) &&
+                            firstFeedItemThumbnail
+                          ) {
+                            img.src = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(firstFeedItemThumbnail)}`;
+                          } else if (
+                            img.src.includes(
+                              encodeURIComponent(firstFeedItemThumbnail || "")
+                            ) &&
+                            firstFeedItemEnclosure
+                          ) {
+                            img.src = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(firstFeedItemEnclosure)}`;
+                          } else if (
+                            img.src.includes(
+                              encodeURIComponent(firstFeedItemEnclosure || "")
+                            ) &&
+                            firstFeedItemItunes
+                          ) {
+                            img.src = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(firstFeedItemItunes)}`;
+                          } else if (
+                            img.src.includes(
+                              encodeURIComponent(firstFeedItemItunes || "")
+                            ) &&
+                            sourceSelectorImage
+                          ) {
+                            img.src = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(sourceSelectorImage)}`;
+                          } else if (
+                            img.src.includes(
+                              encodeURIComponent(sourceSelectorImage || "")
+                            ) &&
+                            faviconImage
+                          ) {
+                            img.src = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(faviconImage)}`;
+                          } else {
+                            img.style.display = "none";
+                          }
+                        }}
+                      />
+                    );
+                  })()}
                 <div className="flex-1 min-w-0 text-center md:text-left">
                   <CardTitle className="text-lg">
-                    {isPodcastFeed && podcastMetadata?.directPlaybackInfo?.title 
-                      ? podcastMetadata.directPlaybackInfo.title 
-                      : "Podcast Player"}
+                    {podcastMetadata?.directPlaybackInfo?.title ||
+                      podcastMetadata?.directPlaybackInfo?.feedInfo?.title ||
+                      selectedSource?.name ||
+                      "Podcast Player"}
                   </CardTitle>
-                  {isPodcastFeed && podcastMetadata?.directPlaybackInfo?.feedInfo?.title && (
-                    <div className="text-sm font-normal text-gray-600 mt-1 truncate">
-                      {podcastMetadata.directPlaybackInfo.feedInfo.title}
-                    </div>
-                  )}
-                  {isPodcastFeed && podcastMetadata?.directPlaybackInfo?.pubDate && (
-                    <div className="text-xs text-gray-500 mt-1">
-                      Published: {new Date(podcastMetadata.directPlaybackInfo.pubDate).toLocaleDateString()}
-                    </div>
-                  )}
+                  {isPodcastFeed &&
+                    podcastMetadata?.directPlaybackInfo?.feedInfo?.title && (
+                      <div className="text-sm font-normal text-gray-600 mt-1 truncate">
+                        {podcastMetadata.directPlaybackInfo.feedInfo.title}
+                      </div>
+                    )}
+                  {isPodcastFeed &&
+                    podcastMetadata?.directPlaybackInfo?.pubDate && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        Published:{" "}
+                        {new Date(
+                          podcastMetadata.directPlaybackInfo.pubDate
+                        ).toLocaleDateString()}
+                      </div>
+                    )}
                 </div>
               </div>
             </CardHeader>
@@ -775,9 +1331,12 @@ ${podcastMetadata.notes.join("\n\n")}`,
                         <p className="text-sm text-blue-800">
                           🎧 Playing original podcast audio directly
                         </p>
-                        {podcastMetadata?.directPlaybackInfo?.feedInfo?.link && (
-                          <a 
-                            href={podcastMetadata.directPlaybackInfo.feedInfo.link}
+                        {podcastMetadata?.directPlaybackInfo?.feedInfo
+                          ?.link && (
+                          <a
+                            href={
+                              podcastMetadata.directPlaybackInfo.feedInfo.link
+                            }
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-xs text-blue-600 hover:text-blue-800 mt-1 inline-block"
@@ -789,31 +1348,36 @@ ${podcastMetadata.notes.join("\n\n")}`,
                     </div>
                   </div>
                 )}
-                {isPodcastFeed && podcastMetadata?.directPlaybackInfo?.description && (
-                  <div className="mt-2">
-                    <div 
-                      ref={descriptionRef}
-                      className={`text-sm text-gray-600 prose prose-sm max-w-none ${!expandedDescription ? 'line-clamp-2' : ''}`}
-                      dangerouslySetInnerHTML={{ 
-                        __html: DOMPurify.sanitize(podcastMetadata.directPlaybackInfo.description) 
-                      }}
-                    />
-                    {isTruncated && (
-                      <button
-                        onClick={() => setExpandedDescription(!expandedDescription)}
-                        className="text-sm text-blue-600 hover:text-blue-800 mt-1"
-                      >
-                        {expandedDescription ? 'Show less' : 'Read more'}
-                      </button>
-                    )}
-                  </div>
-                )}
+                {isPodcastFeed &&
+                  podcastMetadata?.directPlaybackInfo?.description && (
+                    <div className="mt-2">
+                      <div
+                        ref={descriptionRef}
+                        className={`text-sm text-gray-600 prose prose-sm max-w-none ${!expandedDescription ? "line-clamp-2" : ""}`}
+                        dangerouslySetInnerHTML={{
+                          __html: DOMPurify.sanitize(
+                            podcastMetadata.directPlaybackInfo.description
+                          ),
+                        }}
+                      />
+                      {isTruncated && (
+                        <button
+                          onClick={() =>
+                            setExpandedDescription(!expandedDescription)
+                          }
+                          className="text-sm text-blue-600 hover:text-blue-800 mt-1"
+                        >
+                          {expandedDescription ? "Show less" : "Read more"}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 <audio
                   ref={audioRef}
                   className="hidden"
                   src={podcastUrl || undefined}
                 />
-                
+
                 {/* Central Microphone Button */}
                 <div className="flex justify-center mb-6">
                   <Button
@@ -832,7 +1396,9 @@ ${podcastMetadata.notes.join("\n\n")}`,
                     ) : (
                       <div className="flex flex-col items-center">
                         <Mic className="h-12 w-12" />
-                        <span className="text-sm mt-2 font-medium">{aiActive ? "Release to stop" : "Hold to talk"}</span>
+                        <span className="text-sm mt-2 font-medium">
+                          {aiActive ? "Release to stop" : "Hold to talk"}
+                        </span>
                       </div>
                     )}
                   </Button>
@@ -941,9 +1507,25 @@ ${podcastMetadata.notes.join("\n\n")}`,
           <div className="flex justify-center mt-8">
             {isGenerating && (
               <div className="flex items-center justify-center">
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                <svg
+                  className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
                 </svg>
                 Processing feeds...
               </div>
