@@ -30,6 +30,7 @@ import {
   defaultSources,
 } from "./components/SourceSelector";
 import DOMPurify from "dompurify";
+import { Input } from "@/components/ui/input";
 
 const NUM_STORIES = 10;
 const API_BASE_URL =
@@ -161,6 +162,10 @@ export default function App() {
   const isMobile = useIsMobile();
   const [mobilePlayerOpen, setMobilePlayerOpen] = useState(false);
   const [hostNames, setHostNames] = useState<string[]>(["Roshan", "Nathaniel"]);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchType, setSearchType] = useState<"url" | "podcast" | "website">(
+    "url"
+  );
 
   const isToday = (date: Date) => {
     const today = new Date();
@@ -727,6 +732,22 @@ ${podcastMetadata.notes.join("\n\n")}`,
     return "";
   };
 
+  // Search handler
+  const handleSearchSubmit = async () => {
+    if (searchInput.trim()) {
+      try {
+        if (searchType === "url") {
+          await handleAddCustomSource(searchInput.trim());
+        }
+        // TODO: Add podcast directory search and website search
+      } catch (error) {
+        console.error("Search failed:", error);
+      }
+
+      setSearchInput("");
+    }
+  };
+
   // --- MOBILE PLAYER FOOTER ---
   if (isMobile) {
     return (
@@ -743,6 +764,71 @@ ${podcastMetadata.notes.join("\n\n")}`,
                 Transform any feed or turn your regular podcasts into a
                 conversation with your hosts Roshan and Nathaniel
               </p>
+            </div>
+
+            {/* Search Section */}
+            <div className="bg-white rounded-lg shadow-sm border p-4">
+              <h3 className="text-lg font-semibold mb-4"> Add Content</h3>
+
+              {/* Search Type Selection */}
+              <div className="flex space-x-2 mb-4">
+                <Button
+                  variant={searchType === "url" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSearchType("url")}
+                  className="flex-1"
+                >
+                  RSS/Feed URL
+                </Button>
+                <Button
+                  variant={searchType === "podcast" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSearchType("podcast")}
+                  className="flex-1"
+                  disabled
+                  title="Coming soon"
+                >
+                  Podcast Directory
+                </Button>
+                <Button
+                  variant={searchType === "website" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSearchType("website")}
+                  className="flex-1"
+                  disabled
+                  title="Coming soon"
+                >
+                  Website
+                </Button>
+              </div>
+
+              {/* Search Input */}
+              <div className="flex items-center space-x-2 mb-2">
+                <Input
+                  placeholder={
+                    searchType === "url"
+                      ? "Enter RSS feed URL"
+                      : searchType === "podcast"
+                        ? "Search podcast directory..."
+                        : "Enter website URL"
+                  }
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleSearchSubmit();
+                    }
+                  }}
+                />
+              </div>
+
+              <Button
+                className="w-full"
+                onClick={handleSearchSubmit}
+                disabled={!searchInput.trim()}
+              >
+                {searchType === "url" ? "Add Feed" : "Search"}
+              </Button>
             </div>
 
             {/* Source Selector */}
