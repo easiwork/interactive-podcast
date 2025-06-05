@@ -12,7 +12,11 @@ import {
   getDirectPodcastForPlayback,
 } from "./podcast-generator";
 import { fetchTopHNStories } from "./hacker-news";
-import fetch from 'node-fetch';
+import fetch from "node-fetch";
+
+// Get the podcast storage directory from environment variable or use default
+const PODCASTS_DIR =
+  process.env.PODCASTS_DIR || path.join(process.cwd(), "podcasts");
 
 const client = new ElevenLabsClient({
   apiKey: process.env.ELEVENLABS_API_KEY,
@@ -43,7 +47,7 @@ app.use(express.json());
 app.use(cors());
 
 // Serve static files from the podcasts directory
-router.use("/podcasts", express.static(path.join(process.cwd(), "podcasts")));
+router.use("/podcasts", express.static(PODCASTS_DIR));
 
 export type VoiceOption = "Rachel" | "Daniel";
 
@@ -136,10 +140,12 @@ router.post("/debug/generate-script", async (_, res) => {
     });
 
     const articleNotes = await Promise.all(articleNotesPromises);
-    const script = await generatePodcastScriptFromNotes(articleNotes.map(notes => ({
-      ...notes,
-      contentType: 'text' as const
-    })));
+    const script = await generatePodcastScriptFromNotes(
+      articleNotes.map((notes) => ({
+        ...notes,
+        contentType: "text" as const,
+      }))
+    );
 
     res.json({
       stories,
@@ -155,7 +161,10 @@ router.post("/debug/generate-script", async (_, res) => {
 // Endpoint for generating a full podcast
 router.post("/generate-podcast", async (req, res) => {
   try {
-    const { rssFeedUrl, storyCount } = req.body as { rssFeedUrl?: string; storyCount?: number };
+    const { rssFeedUrl, storyCount } = req.body as {
+      rssFeedUrl?: string;
+      storyCount?: number;
+    };
 
     let result;
     if (rssFeedUrl) {
@@ -174,7 +183,7 @@ router.post("/generate-podcast", async (req, res) => {
           url: story.url,
           notes,
           title: story.title,
-          contentType: 'text' as const
+          contentType: "text" as const,
         };
       });
 
@@ -182,31 +191,31 @@ router.post("/generate-podcast", async (req, res) => {
       const script = await generatePodcastScriptFromNotes(articleNotes);
       result = {
         script,
-        audioFile: '', // This will be set by the podcast generator
+        audioFile: "", // This will be set by the podcast generator
         notes: articleNotes.map((notes) => notes.notes),
-        feedItems: stories
+        feedItems: stories,
       };
     }
 
     // Handle direct playback URLs differently
-    if (result.audioFile.startsWith('http')) {
+    if (result.audioFile.startsWith("http")) {
       // For direct playback, use the URL as is
       const feedItem = result.feedItems[0];
-      const feedInfo = 'feedInfo' in feedItem ? feedItem.feedInfo : undefined;
-      
+      const feedInfo = "feedInfo" in feedItem ? feedItem.feedInfo : undefined;
+
       res.json({
         ...result,
         isDirectPlayback: true,
         directPlaybackInfo: {
-          title: result.script.replace('Direct podcast playback: ', ''),
+          title: result.script.replace("Direct podcast playback: ", ""),
           audioUrl: result.audioFile,
-          feedInfo
-        }
+          feedInfo,
+        },
       });
     } else {
       // For generated podcasts, convert the file system path to a web-accessible URL
       const relativePath = path.relative(process.cwd(), result.audioFile);
-      const audioUrl = `/${relativePath.replace(/\\/g, '/')}`;
+      const audioUrl = `/${relativePath.replace(/\\/g, "/")}`;
 
       res.json({
         ...result,
@@ -222,17 +231,25 @@ router.post("/generate-podcast", async (req, res) => {
 // Endpoint for direct podcast audio access with transcription
 router.post("/direct-podcast", async (req, res) => {
   try {
-    const { rssFeedUrl, forceRegenerate } = req.body as { rssFeedUrl: string; forceRegenerate?: boolean };
+    const { rssFeedUrl, forceRegenerate } = req.body as {
+      rssFeedUrl: string;
+      forceRegenerate?: boolean;
+    };
 
     if (!rssFeedUrl) {
       res.status(400).json({ error: "RSS feed URL is required" });
       return;
     }
 
-    const result = await getDirectPodcastAudio(rssFeedUrl, forceRegenerate || false);
+    const result = await getDirectPodcastAudio(
+      rssFeedUrl,
+      forceRegenerate || false
+    );
 
     if (!result) {
-      res.status(404).json({ error: "No audio episodes found in the RSS feed" });
+      res
+        .status(404)
+        .json({ error: "No audio episodes found in the RSS feed" });
       return;
     }
 
@@ -246,17 +263,25 @@ router.post("/direct-podcast", async (req, res) => {
 // Endpoint for simple podcast playback info (no transcription)
 router.post("/podcast-playback", async (req, res) => {
   try {
-    const { rssFeedUrl, forceRegenerate } = req.body as { rssFeedUrl: string; forceRegenerate?: boolean };
+    const { rssFeedUrl, forceRegenerate } = req.body as {
+      rssFeedUrl: string;
+      forceRegenerate?: boolean;
+    };
 
     if (!rssFeedUrl) {
       res.status(400).json({ error: "RSS feed URL is required" });
       return;
     }
 
-    const result = await getDirectPodcastForPlayback(rssFeedUrl, forceRegenerate || false);
+    const result = await getDirectPodcastForPlayback(
+      rssFeedUrl,
+      forceRegenerate || false
+    );
 
     if (!result) {
-      res.status(404).json({ error: "No audio episodes found in the RSS feed" });
+      res
+        .status(404)
+        .json({ error: "No audio episodes found in the RSS feed" });
       return;
     }
 
@@ -271,7 +296,7 @@ router.post("/podcast-playback", async (req, res) => {
 // @ts-ignore - TypeScript router signature issue
 router.get("/proxy-image", async (req, res) => {
   const imageUrl = req.query.url as string;
-  
+
   if (!imageUrl) {
     return res.status(400).json({ error: "Image URL is required" });
   }
@@ -279,21 +304,24 @@ router.get("/proxy-image", async (req, res) => {
   try {
     // Add more robust headers for favicon requests
     const headers: Record<string, string> = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-      'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
-      'Accept-Language': 'en-US,en;q=0.9',
-      'Referer': new URL(imageUrl).origin,
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+      Accept: "image/webp,image/apng,image/*,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+      Referer: new URL(imageUrl).origin,
     };
 
     // Add specific headers for favicon requests
-    if (imageUrl.includes('favicon')) {
-      headers['Accept'] = 'image/x-icon,image/*,*/*;q=0.8';
+    if (imageUrl.includes("favicon")) {
+      headers["Accept"] = "image/x-icon,image/*,*/*;q=0.8";
     }
 
     const response = await fetch(imageUrl, { headers });
 
     if (!response.ok) {
-      console.error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+      console.error(
+        `Failed to fetch image: ${response.status} ${response.statusText}`
+      );
       return res.status(404).json({ error: "Image not found" });
     }
 
@@ -302,16 +330,15 @@ router.get("/proxy-image", async (req, res) => {
     const buffer = Buffer.from(imageBuffer);
 
     // Forward the content type
-    const contentType = response.headers.get('content-type') || 'image/jpeg';
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-    res.setHeader('Content-Length', buffer.length);
-    
+    const contentType = response.headers.get("content-type") || "image/jpeg";
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.setHeader("Content-Length", buffer.length);
+
     // Send the buffer
     res.send(buffer);
-
   } catch (error) {
-    console.error('Error proxying image:', error);
+    console.error("Error proxying image:", error);
     res.status(500).json({ error: "Failed to fetch image" });
   }
 });

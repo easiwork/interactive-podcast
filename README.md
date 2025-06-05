@@ -88,39 +88,93 @@ Access the debug interface by clicking the "Show Debug" button in the top-right 
 
 ## Production Deployment
 
-The application is deployed on a Digital Ocean server and accessible at [hackercast.club](https://hackercast.club).
+The application is deployed on a Digital Ocean server and accessible at [podcastjukebox.com](https://podcastjukebox.com).
 
 ### Server Setup
 
-1. **Static Assets**:
+1. **Repository and Development Server**:
+
+   - The application is cloned in the home directory
+   - Running in development mode using `bun run dev:all`
+   - This serves both the frontend and backend
+
+2. **Nginx Configuration**:
+
+   - Nginx is configured as a reverse proxy
+   - Forwards requests to the development server
+   - Handles SSL termination
+
+3. **Storage Configuration**:
+
+   - The application uses the `PODCASTS_DIR` environment variable to determine where to store generated podcasts
+   - In production, this is set to `/var/www/podcastjukebox.com/podcasts`
+   - The directory is owned by `www-data:www-data` with permissions `755`
+   - All generated podcasts are stored in date-based subdirectories
+
+4. **Storage Setup Commands**:
 
    ```bash
-   bun run build-and-copy
+   # Create storage directory
+   ssh root@podcastjukebox.com "mkdir -p /var/www/podcastjukebox.com/podcasts && chown -R www-data:www-data /var/www/podcastjukebox.com/podcasts && chmod -R 755 /var/www/podcastjukebox.com/podcasts"
    ```
 
-   This builds the frontend assets and copies them to the appropriate directory for Apache to serve.
-
-2. **Backend Server**:
+5. **Service Management**:
 
    ```bash
-   bun run server:prod
+   # Check if the development server is running
+   ssh root@podcastjukebox.com "ps aux | grep 'bun run dev:all'"
+
+   # View nginx logs
+   ssh root@podcastjukebox.com "tail -f /var/log/nginx/error.log"
+   ssh root@podcastjukebox.com "tail -f /var/log/nginx/access.log"
+
+   # Restart nginx
+   ssh root@podcastjukebox.com "systemctl restart nginx"
    ```
-
-   The backend API server is managed using PM2:
-
-   ```bash
-   pm2 start server:prod
-   ```
-
-3. **Web Server**:
-   - Apache is configured to serve static assets
-   - Reverse proxy configuration routes API requests to the backend server
 
 ### Deployment Process
 
-1. Build and copy static assets
-2. Restart the backend server using PM2
-3. Apache automatically serves the updated static files
+1. Pull the latest changes:
+
+   ```bash
+   ssh root@podcastjukebox.com "cd ~/interactive-podcast && git pull"
+   ```
+
+2. Install any new dependencies:
+
+   ```bash
+   ssh root@podcastjukebox.com "cd ~/interactive-podcast && bun install"
+   ```
+
+3. Restart the development server:
+   ```bash
+   ssh root@podcastjukebox.com "cd ~/interactive-podcast && bun run dev:all"
+   ```
+
+### Troubleshooting
+
+1. **Missing Podcasts**:
+
+   - Check if the `podcasts` directory exists and has correct permissions
+   - Verify the `PODCASTS_DIR` environment variable is set correctly
+   - Check the application logs for any errors
+
+2. **Server Issues**:
+
+   - Check if the development server is running: `ps aux | grep 'bun run dev:all'`
+   - Check nginx status: `systemctl status nginx`
+   - View nginx logs: `tail -f /var/log/nginx/error.log`
+
+3. **Storage Issues**:
+
+   - Check disk space: `df -h`
+   - Verify directory permissions: `ls -la /var/www/podcastjukebox.com/podcasts`
+   - Check ownership: `ls -l /var/www/podcastjukebox.com/`
+
+4. **Application Issues**:
+   - Check the development server output for errors
+   - Verify environment variables are set correctly
+   - Check if the application can write to the podcasts directory
 
 ## Project Structure
 
