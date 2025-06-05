@@ -44,7 +44,19 @@ const router = express.Router();
 
 // Middleware
 app.use(express.json());
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173", // Vite dev server
+      "http://podcastjukebox.com",
+      "https://podcastjukebox.com",
+      "http://localhost:3000", // Backend server
+    ],
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 
 // Serve static files from the podcasts directory
 router.use("/podcasts", express.static(PODCASTS_DIR));

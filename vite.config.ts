@@ -30,12 +30,13 @@ export default defineConfig({
   server: {
     host: "0.0.0.0", // Listen on all interfaces
     port: 5173,
-    allowedHosts: ["podcastjukebox.com"],
+    allowedHosts: ["podcastjukebox.com", "localhost"],
     proxy: {
       "/api": {
         target: "http://localhost:3000",
         changeOrigin: true,
         secure: false,
+        rewrite: (path) => path.replace(/^\/api/, "/api"),
       },
       "/__vite_dev_proxy__": {
         changeOrigin: true,

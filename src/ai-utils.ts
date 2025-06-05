@@ -6,10 +6,14 @@ const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
 
 export const getHost = () => {
   if (import.meta.env.DEV) {
+    // In development, check if we're accessing via domain or localhost
+    if (window.location.hostname === "podcastjukebox.com") {
+      return "/api"; // Use Vite proxy
+    }
     return "http://localhost:3000/api";
   }
 
-  return "api";
+  return "/api";
 };
 
 const EPHEMERAL_KEY_URL = `${getHost()}/get-ephemeral-key`;

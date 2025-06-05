@@ -11,8 +11,21 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 
-const API_BASE_URL =
-  process.env.NODE_ENV === "development" ? "http://localhost:3000/api" : "api";
+const getApiBaseUrl = () => {
+  if (process.env.NODE_ENV === "development") {
+    // In development, check if we're accessing via domain or localhost
+    if (
+      typeof window !== "undefined" &&
+      window.location.hostname === "podcastjukebox.com"
+    ) {
+      return "/api"; // Use Vite proxy
+    }
+    return "http://localhost:3000/api";
+  }
+  return "/api";
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 export interface Source {
   id: string;
