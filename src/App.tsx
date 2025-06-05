@@ -724,12 +724,13 @@ ${podcastMetadata.notes.join("\n\n")}`,
       firstFeedItemEnclosure ||
       firstFeedItemItunes ||
       sourceSelectorImage ||
-      faviconImage;
+      faviconImage ||
+      "/hosts.png"; // Use hosts.png as the final fallback
 
-    if (imgSrc) {
+    if (imgSrc.startsWith("http")) {
       return `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(imgSrc)}`;
     }
-    return "";
+    return imgSrc; // Return the hosts.png path directly if it's the fallback
   };
 
   // Search handler
@@ -757,6 +758,11 @@ ${podcastMetadata.notes.join("\n\n")}`,
           <div className="max-w-4xl mx-auto p-4 space-y-6">
             {/* Header Section */}
             <div className="text-center py-6">
+              <img
+                src="/hosts.png"
+                alt="Hosts"
+                className="w-32 h-32 mx-auto mb-4 rounded-full object-cover"
+              />
               <h1 className="text-2xl font-bold text-gray-900 mb-2">
                 Podcast Jukebox
               </h1>
@@ -927,61 +933,21 @@ ${podcastMetadata.notes.join("\n\n")}`,
                 {/* Large Image Section */}
                 <div className="w-full max-w-sm aspect-square">
                   {(() => {
-                    // Use same image logic as desktop
-                    const bestItemImage =
-                      podcastMetadata?.directPlaybackInfo?.imageUrl;
-                    const feedChannelImage =
-                      podcastMetadata?.directPlaybackInfo?.feedInfo?.imageUrl;
-                    const firstFeedItemImage =
-                      podcastMetadata?.feedItems?.[0]?.imageUrl;
-                    const firstFeedItemThumbnail =
-                      podcastMetadata?.feedItems?.[0]?.thumbnailUrl;
-                    const firstFeedItemEnclosure =
-                      podcastMetadata?.feedItems?.[0]?.enclosure?.imageUrl;
-                    const firstFeedItemItunes =
-                      podcastMetadata?.feedItems?.[0]?.itunes?.image;
-                    const sourceSelectorImage = selectedSource?.imageUrl;
-                    const faviconImage =
-                      podcastMetadata?.directPlaybackInfo?.faviconUrl;
-
-                    let imgSrc =
-                      bestItemImage ||
-                      feedChannelImage ||
-                      firstFeedItemImage ||
-                      firstFeedItemThumbnail ||
-                      firstFeedItemEnclosure ||
-                      firstFeedItemItunes ||
-                      sourceSelectorImage ||
-                      faviconImage;
-
-                    if (imgSrc) {
-                      const proxyUrl = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(imgSrc)}`;
-                      return (
-                        <img
-                          src={proxyUrl}
-                          alt={
-                            podcastMetadata?.directPlaybackInfo?.title ||
-                            "Podcast artwork"
-                          }
-                          className="w-full h-full rounded-2xl object-cover shadow-lg"
-                          onError={(e) => {
-                            const img = e.target as HTMLImageElement;
-                            img.style.display = "none";
-                          }}
-                        />
-                      );
-                    } else {
-                      return (
-                        <div className="w-full h-full bg-gray-100 rounded-2xl flex items-center justify-center shadow-lg">
-                          <div className="text-gray-400 text-center">
-                            <div className="w-24 h-24 mx-auto mb-2 bg-gray-200 rounded-full flex items-center justify-center">
-                              <Mic className="w-12 h-12" />
-                            </div>
-                            <p className="text-sm">No artwork available</p>
-                          </div>
-                        </div>
-                      );
-                    }
+                    const imgSrc = getArtworkSrc();
+                    return (
+                      <img
+                        src={imgSrc}
+                        alt={
+                          podcastMetadata?.directPlaybackInfo?.title ||
+                          "Podcast artwork"
+                        }
+                        className="w-full h-full rounded-2xl object-cover shadow-lg"
+                        onError={(e) => {
+                          const img = e.target as HTMLImageElement;
+                          img.style.display = "none";
+                        }}
+                      />
+                    );
                   })()}
                 </div>
 
@@ -1247,7 +1213,12 @@ ${podcastMetadata.notes.join("\n\n")}`,
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-col items-center mb-8">
+        <img
+          src="/hosts.png"
+          alt="Hosts"
+          className="w-40 h-40 mb-4 rounded-full object-cover"
+        />
         <h1 className="text-3xl font-bold">{getPodcastTitle()}</h1>
         <div className="flex space-x-4 hidden">
           <Button variant="outline" onClick={() => setShowDebug(!showDebug)}>
@@ -1261,128 +1232,20 @@ ${podcastMetadata.notes.join("\n\n")}`,
           <Card>
             <CardHeader>
               <div className="flex flex-col md:flex-row items-center md:items-start space-y-4 md:space-y-0 md:space-x-4">
-                {isPodcastFeed &&
-                  podcastMetadata?.directPlaybackInfo &&
-                  (() => {
-                    // Check all possible image sources
-                    const bestItemImage =
-                      podcastMetadata.directPlaybackInfo.imageUrl; // This is already server-resolved best image
-                    const feedChannelImage =
-                      podcastMetadata.directPlaybackInfo.feedInfo?.imageUrl; // Specific feed/channel image
-
-                    // Fallbacks from feedItems array (less prioritised now)
-                    const firstFeedItemImage =
-                      podcastMetadata.feedItems?.[0]?.imageUrl;
-                    const firstFeedItemThumbnail =
-                      podcastMetadata.feedItems?.[0]?.thumbnailUrl;
-                    const firstFeedItemEnclosure =
-                      podcastMetadata.feedItems?.[0]?.enclosure?.imageUrl;
-                    const firstFeedItemItunes =
-                      podcastMetadata.feedItems?.[0]?.itunes?.image;
-
-                    const sourceSelectorImage = selectedSource?.imageUrl;
-                    const faviconImage =
-                      podcastMetadata.directPlaybackInfo.faviconUrl;
-
-                    console.log("Image sources for rendering:", {
-                      bestItemImage,
-                      feedChannelImage,
-                      firstFeedItemImage,
-                      firstFeedItemThumbnail,
-                      firstFeedItemEnclosure,
-                      firstFeedItemItunes,
-                      sourceSelectorImage,
-                      faviconImage,
-                    });
-
-                    // Updated Prioritization:
-                    // 1. Server-resolved best image (episode or feed if episode had none)
-                    // 2. Specific Feed/Channel image from server
-                    // 3. Fallbacks from feedItems array (general item image, thumbnail, etc.)
-                    // 4. Image from SourceSelector component
-                    // 5. Favicon
-                    let imgSrc =
-                      bestItemImage ||
-                      feedChannelImage ||
-                      firstFeedItemImage ||
-                      firstFeedItemThumbnail ||
-                      firstFeedItemEnclosure ||
-                      firstFeedItemItunes ||
-                      sourceSelectorImage ||
-                      faviconImage;
-
-                    if (!imgSrc) return null;
-
-                    // Use the proxy endpoint for all images to handle CORS and 403 errors
-                    const proxyUrl = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(imgSrc)}`;
-
-                    return (
-                      <img
-                        src={proxyUrl}
-                        alt={
-                          podcastMetadata.directPlaybackInfo.title ||
-                          "Podcast artwork"
-                        }
-                        className="w-48 h-48 md:w-24 md:h-24 rounded-lg object-cover flex-shrink-0 shadow-lg"
-                        onError={(e) => {
-                          const img = e.target as HTMLImageElement;
-                          // Try each fallback image source in order through the proxy
-                          if (
-                            img.src.includes(
-                              encodeURIComponent(bestItemImage || "")
-                            ) &&
-                            feedChannelImage
-                          ) {
-                            img.src = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(feedChannelImage)}`;
-                          } else if (
-                            img.src.includes(
-                              encodeURIComponent(feedChannelImage || "")
-                            ) &&
-                            firstFeedItemImage
-                          ) {
-                            img.src = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(firstFeedItemImage)}`;
-                          } else if (
-                            img.src.includes(
-                              encodeURIComponent(firstFeedItemImage || "")
-                            ) &&
-                            firstFeedItemThumbnail
-                          ) {
-                            img.src = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(firstFeedItemThumbnail)}`;
-                          } else if (
-                            img.src.includes(
-                              encodeURIComponent(firstFeedItemThumbnail || "")
-                            ) &&
-                            firstFeedItemEnclosure
-                          ) {
-                            img.src = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(firstFeedItemEnclosure)}`;
-                          } else if (
-                            img.src.includes(
-                              encodeURIComponent(firstFeedItemEnclosure || "")
-                            ) &&
-                            firstFeedItemItunes
-                          ) {
-                            img.src = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(firstFeedItemItunes)}`;
-                          } else if (
-                            img.src.includes(
-                              encodeURIComponent(firstFeedItemItunes || "")
-                            ) &&
-                            sourceSelectorImage
-                          ) {
-                            img.src = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(sourceSelectorImage)}`;
-                          } else if (
-                            img.src.includes(
-                              encodeURIComponent(sourceSelectorImage || "")
-                            ) &&
-                            faviconImage
-                          ) {
-                            img.src = `${API_BASE_URL}/proxy-image?url=${encodeURIComponent(faviconImage)}`;
-                          } else {
-                            img.style.display = "none";
-                          }
-                        }}
-                      />
-                    );
-                  })()}
+                {podcastMetadata?.directPlaybackInfo && (
+                  <img
+                    src={getArtworkSrc()}
+                    alt={
+                      podcastMetadata.directPlaybackInfo.title ||
+                      "Podcast artwork"
+                    }
+                    className="w-48 h-48 md:w-24 md:h-24 rounded-lg object-cover flex-shrink-0 shadow-lg"
+                    onError={(e) => {
+                      const img = e.target as HTMLImageElement;
+                      img.style.display = "none";
+                    }}
+                  />
+                )}
                 <div className="flex-1 min-w-0 text-center md:text-left">
                   <CardTitle className="text-lg">
                     {podcastMetadata?.directPlaybackInfo?.title ||
