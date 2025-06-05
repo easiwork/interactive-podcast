@@ -166,6 +166,12 @@ export default function App() {
   const [searchType, setSearchType] = useState<"url" | "podcast" | "website">(
     "url"
   );
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [modalHeight, setModalHeight] = useState<number>(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isOpening, setIsOpening] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   const isToday = (date: Date) => {
     const today = new Date();
@@ -749,6 +755,108 @@ ${podcastMetadata.notes.join("\n\n")}`,
     }
   };
 
+  // Add touch handlers for the drawer
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartY(e.touches[0].clientY);
+    setIsDragging(true);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartY === null) return;
+
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - touchStartY;
+
+    // Only allow dragging down if we're at the top of the content
+    if (diff > 0 && modalRef.current?.scrollTop === 0) {
+      e.preventDefault();
+      const newHeight = Math.max(0, modalHeight - diff);
+      setModalHeight(newHeight);
+
+      // Close the modal if dragged down more than 100px
+      if (diff > 100) {
+        setIsDragging(false);
+        setMobilePlayerOpen(false);
+        setModalHeight(0);
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setTouchStartY(null);
+    setIsDragging(false);
+    // Reset height if not closed
+    if (modalHeight > 0) {
+      setModalHeight(0);
+    }
+  };
+
+  // Add effect to handle opening/closing animation
+  useEffect(() => {
+    if (mobilePlayerOpen) {
+      setIsVisible(true);
+      // Start opening animation on next frame
+      requestAnimationFrame(() => {
+        setIsOpening(true);
+      });
+      // Reset opening state after animation
+      const timer = setTimeout(() => {
+        setIsOpening(false);
+      }, 300);
+      return () => clearTimeout(timer);
+    } else {
+      // Start closing animation
+      setIsOpening(true);
+      // Wait for close animation to finish before hiding
+      const timer = setTimeout(() => {
+        setIsVisible(false);
+        setIsOpening(false);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [mobilePlayerOpen]);
+
+  // Update the close handler to use animation
+  const handleClose = () => {
+    setMobilePlayerOpen(false);
+  };
+
+  // Handle precise dragging of the modal
+  const handleHandleTouchStart = (e: React.TouchEvent) => {
+    e.stopPropagation();
+    setTouchStartY(e.touches[0].clientY);
+    setIsDragging(true);
+  };
+
+  const handleHandleTouchMove = (e: React.TouchEvent) => {
+    e.stopPropagation();
+    if (touchStartY === null) return;
+
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - touchStartY;
+    const newHeight = Math.max(0, diff);
+
+    // Update modal position based on drag
+    setModalHeight(newHeight);
+
+    // Close if dragged down more than 100px
+    if (diff > 100) {
+      setIsDragging(false);
+      handleClose();
+      setModalHeight(0);
+    }
+  };
+
+  const handleHandleTouchEnd = () => {
+    if (modalHeight > 50) {
+      // If dragged more than 50px, close the modal
+      handleClose();
+    }
+    setModalHeight(0);
+    setTouchStartY(null);
+    setIsDragging(false);
+  };
+
   // --- MOBILE PLAYER FOOTER ---
   if (isMobile) {
     return (
@@ -918,12 +1026,26 @@ ${podcastMetadata.notes.join("\n\n")}`,
         </div>
 
         {/* Slide-up Player Modal */}
-        {mobilePlayerOpen && (
-          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-center mb-4">
+        {isVisible && (
+          <div
+            ref={modalRef}
+            className={`fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl max-h-[90vh] overflow-y-auto transition-all duration-300 ease-out ${
+              isDragging ? "transition-none" : ""
+            } ${!isOpening ? "translate-y-0" : "translate-y-full"}`}
+            style={{
+              touchAction: "pan-y",
+              transform: `translateY(${isDragging ? modalHeight : 0}px)`,
+            }}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            <div className="flex justify-center mb-4 sticky top-0 bg-white z-10">
               <div
-                className="w-12 h-1.5 bg-gray-300 rounded-full cursor-pointer mt-3"
-                onClick={() => setMobilePlayerOpen(false)}
+                className="w-12 h-1.5 bg-gray-300 rounded-full cursor-pointer mt-3 touch-none active:bg-gray-400 transition-colors"
+                onTouchStart={handleHandleTouchStart}
+                onTouchMove={handleHandleTouchMove}
+                onTouchEnd={handleHandleTouchEnd}
               />
             </div>
 
@@ -1193,7 +1315,7 @@ ${podcastMetadata.notes.join("\n\n")}`,
               <Button
                 className="w-full"
                 variant="secondary"
-                onClick={() => setMobilePlayerOpen(false)}
+                onClick={handleClose}
               >
                 Close
               </Button>
