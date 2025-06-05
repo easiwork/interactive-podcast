@@ -28,6 +28,8 @@ export const createAudioStreamFromText = async (
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    host: "0.0.0.0", // Listen on all interfaces
+    port: 5173,
     allowedHosts: ["podcastjukebox.com"],
     proxy: {
       "/api": {
