@@ -374,7 +374,7 @@ export default function App() {
     const handleKeyDown = async (e: KeyboardEvent) => {
       if (e.code === "Space" && !aiActive && !aiLoading && podcastUrl) {
         e.preventDefault();
-        
+
         // First handle microphone permission if needed
         if (!hasMicrophonePermission) {
           setIsCheckingMicrophone(true);
@@ -1183,4 +1183,30 @@ ${podcastMetadata.notes.join("\n\n")}`,
                     >
                       <div className="flex items-center justify-center space-x-3">
                         <p
-                          className={`
+                          className={`text-sm ${
+                            isPodcastFeed ? "text-blue-800" : "text-purple-800"
+                          }`}
+                        >
+                          {isPodcastFeed
+                            ? "Playing original podcast"
+                            : "Playing personalized version"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  // Desktop layout
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Rest of desktop layout */}
+    </div>
+  );
+}
