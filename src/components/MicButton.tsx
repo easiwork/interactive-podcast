@@ -15,26 +15,58 @@ interface MicButtonProps {
 const MicButton = ({ onListen, onMute, script }: MicButtonProps) => {
   const [isListening, setIsListening] = useState(false);
   const [status, setStatus] = useState("");
+  const isStartingSession = useRef(false);
 
   const { startSession, stopSession, sendTextMessage, isSessionActive } =
     useRealtimeSession();
 
   const toggleListening = async () => {
-    if (!isListening) {
-      onListen();
+    // Prevent multiple simultaneous session starts
+    if (isStartingSession.current) {
+      return;
+    }
 
-      setIsListening(true);
-      setStatus("Starting session...");
-      await startSession();
-      setStatus("Session started");
+    if (!isListening) {
+      try {
+        isStartingSession.current = true;
+        onListen();
+        setIsListening(true);
+        setStatus("Starting session...");
+        await startSession();
+        setStatus("Session started");
+      } catch (error) {
+        console.error("Failed to start session:", error);
+        setIsListening(false);
+        setStatus("Failed to start session");
+        onMute();
+      } finally {
+        isStartingSession.current = false;
+      }
     } else {
       setIsListening(false);
       stopSession();
       setStatus("Session stopped");
-
       onMute();
     }
   };
+
+  // Cleanup effect to ensure session is stopped when component unmounts
+  useEffect(() => {
+    return () => {
+      if (isSessionActive) {
+        stopSession();
+      }
+    };
+  }, [isSessionActive]);
+
+  // Sync local state with session state
+  useEffect(() => {
+    if (!isSessionActive && isListening) {
+      setIsListening(false);
+      setStatus("Session stopped");
+      onMute();
+    }
+  }, [isSessionActive]);
 
   useEffect(() => {
     if (isSessionActive) {
@@ -50,6 +82,7 @@ const MicButton = ({ onListen, onMute, script }: MicButtonProps) => {
         <Button
           onClick={toggleListening}
           className={`w-12 h-12 rounded-full ${isListening ? "bg-red-500 hover:bg-red-600" : ""}`}
+          disabled={isStartingSession.current}
         >
           {isListening ? (
             <MicOff className="w-6 h-6" />
