@@ -33,9 +33,9 @@ export const useRealtimeSession = () => {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true
+          autoGainControl: true,
         },
-        video: false
+        video: false,
       });
       console.log("Got microphone access");
       pc.addTrack(ms.getTracks()[0]);
@@ -152,10 +152,26 @@ export const useRealtimeSession = () => {
     console.log("Session stopped");
   }
 
+  // Generate a UUID-like string as fallback for crypto.randomUUID
+  function generateUUID() {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    // Fallback implementation for environments without crypto.randomUUID
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
+      /[xy]/g,
+      function (c) {
+        const r = (Math.random() * 16) | 0;
+        const v = c === "x" ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      }
+    );
+  }
+
   // Send a message to the model
   function sendClientEvent(message: any) {
     if (dataChannel) {
-      message.event_id = message.event_id || crypto.randomUUID();
+      message.event_id = message.event_id || generateUUID();
       dataChannel.send(JSON.stringify(message));
       setEvents((prev) => [message, ...prev]);
     } else {
