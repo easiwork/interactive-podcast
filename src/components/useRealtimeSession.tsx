@@ -5,8 +5,31 @@ export const useRealtimeSession = () => {
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [events, setEvents] = useState<any[]>([]);
   const [dataChannel, setDataChannel] = useState<RTCDataChannel | null>(null);
+  const [hasMicrophonePermission, setHasMicrophonePermission] = useState(false);
   const peerConnection = useRef<RTCPeerConnection | null>(null);
   const audioElement = useRef<HTMLAudioElement | null>(null);
+
+  // Check microphone permissions
+  async function checkMicrophonePermission() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video: false,
+      });
+      // Stop the stream immediately after checking permissions
+      stream.getTracks().forEach((track) => track.stop());
+      setHasMicrophonePermission(true);
+      return true;
+    } catch (error) {
+      console.log("Microphone permission not granted:", error);
+      setHasMicrophonePermission(false);
+      return false;
+    }
+  }
 
   async function startSession() {
     console.log("Starting session...");
@@ -135,16 +158,35 @@ export const useRealtimeSession = () => {
   }
 
   // Stop current session, clean up peer connection and data channel
-  function stopSession() {
+  async function stopSession() {
     console.log("Stopping session...");
-    if (dataChannel) {
-      console.log("Closing data channel");
-      dataChannel.close();
-    }
-    if (peerConnection.current) {
-      console.log("Closing peer connection");
-      peerConnection.current.close();
-    }
+
+    // Create a cleanup promise
+    const cleanup = new Promise<void>((resolve) => {
+      if (dataChannel) {
+        console.log("Closing data channel");
+        dataChannel.close();
+      }
+
+      if (peerConnection.current) {
+        console.log("Closing peer connection");
+        // Wait for connection state to change
+        const checkState = () => {
+          if (peerConnection.current?.connectionState === "closed") {
+            resolve();
+          } else {
+            setTimeout(checkState, 100);
+          }
+        };
+        peerConnection.current.close();
+        checkState();
+      } else {
+        resolve();
+      }
+    });
+
+    // Wait for cleanup to complete
+    await cleanup;
 
     setIsSessionActive(false);
     setDataChannel(null);
@@ -152,26 +194,10 @@ export const useRealtimeSession = () => {
     console.log("Session stopped");
   }
 
-  // Generate a UUID-like string as fallback for crypto.randomUUID
-  function generateUUID() {
-    if (typeof crypto !== "undefined" && crypto.randomUUID) {
-      return crypto.randomUUID();
-    }
-    // Fallback implementation for environments without crypto.randomUUID
-    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
-      /[xy]/g,
-      function (c) {
-        const r = (Math.random() * 16) | 0;
-        const v = c === "x" ? r : (r & 0x3) | 0x8;
-        return v.toString(16);
-      }
-    );
-  }
-
   // Send a message to the model
   function sendClientEvent(message: any) {
     if (dataChannel) {
-      message.event_id = message.event_id || generateUUID();
+      message.event_id = message.event_id || crypto.randomUUID();
       dataChannel.send(JSON.stringify(message));
       setEvents((prev) => [message, ...prev]);
     } else {
@@ -221,5 +247,7 @@ export const useRealtimeSession = () => {
     stopSession,
     updateSession,
     sendTextMessage,
+    checkMicrophonePermission,
+    hasMicrophonePermission,
   };
 };

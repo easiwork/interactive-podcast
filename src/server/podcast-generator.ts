@@ -22,6 +22,13 @@ const execAsync = promisify(exec);
 const PODCASTS_DIR =
   process.env.PODCASTS_DIR || path.join(process.cwd(), "podcasts");
 
+// Add this constant at the top with other constants
+const FAILURE_AUDIO_PATH = path.join(
+  process.cwd(),
+  "public",
+  "podcast_failure.m4a"
+);
+
 // Utility function to get local date string in YYYY-MM-DD format
 function getLocalDateString(): string {
   const now = new Date();
@@ -282,25 +289,53 @@ export async function combineAudioFiles(
     await execAsync(
       `ffmpeg -f concat -safe 0 -i ${fileListPath} -c copy ${outputPath} -y`
     );
+
+    // Verify the output file is valid
+    try {
+      const stats = await fs.promises.stat(outputPath);
+      if (stats.size === 0) {
+        throw new Error("Generated MP3 file is empty");
+      }
+
+      // Try to read the first few bytes to verify it's a valid MP3
+      const buffer = Buffer.alloc(4);
+      const fd = await fs.promises.open(outputPath, "r");
+      await fd.read(buffer, 0, 4, 0);
+      await fd.close();
+
+      // Check for MP3 header (ID3 or MPEG sync)
+      const isMP3 =
+        (buffer[0] === 0x49 && buffer[1] === 0x44 && buffer[2] === 0x33) || // ID3
+        (buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0); // MPEG sync
+
+      if (!isMP3) {
+        throw new Error("Generated file is not a valid MP3");
+      }
+    } catch (error) {
+      logger.error("Generated MP3 file is invalid:", error);
+      // Copy the failure audio file instead
+      const failureAudioPath = path.join(
+        process.cwd(),
+        "public",
+        "podcast_failure.m4a"
+      );
+      await fs.promises.copyFile(failureAudioPath, outputPath);
+      logger.info(`Copied failure audio to ${outputPath}`);
+      return;
+    }
+
     logger.info(`Successfully combined audio files into ${outputPath}`);
   } catch (error) {
     logger.error(`Failed to combine audio files:`, error);
-    throw new Error("Failed to combine audio files");
+    // Copy the failure audio file instead
+    const failureAudioPath = path.join(
+      process.cwd(),
+      "public",
+      "podcast_failure.m4a"
+    );
+    await fs.promises.copyFile(failureAudioPath, outputPath);
+    logger.info(`Copied failure audio to ${outputPath}`);
   }
-
-  //   try {
-  //     // Clean up temporary files
-  //     for (const file of audioFiles) {
-  //       await fs.promises.unlink(file);
-  //     }
-  //     await fs.promises.unlink(fileListPath);
-  //     console.log(`[Podcast Generator] Cleaned up temporary files`);
-  //   } catch (error) {
-  //     console.error(
-  //       `[Podcast Generator] Failed to clean up temporary files:`,
-  //       error
-  //     );
-  //   }
 }
 
 export async function generateFullPodcast(
@@ -451,8 +486,9 @@ export async function generateFullPodcast(
         "Failed to generate placeholder audio for empty podcast",
         ttsError
       );
-      // Fallback: create a truly empty file if TTS fails
-      await fs.promises.writeFile(emptyAudioFilePath, "");
+      // Copy the failure audio file instead of creating an empty one
+      await fs.promises.copyFile(FAILURE_AUDIO_PATH, emptyAudioFilePath);
+      logger.info(`Copied failure audio to ${emptyAudioFilePath}`);
     }
 
     const result: PodcastGenerationResult = {
@@ -629,7 +665,6 @@ export async function generateFullPodcast(
     logger.warn(
       `No articles could be processed into notes from RSS feed ${rssFeedUrl}.`
     );
-    // Handle case where no notes could be generated (similar to no items found)
     const emptyScript =
       "No processable content found in the feed items for today's podcast.";
     const emptyAudioDir = path.join(feedSpecificDir, "empty_notes_audio");
@@ -650,14 +685,16 @@ export async function generateFullPodcast(
         "Failed to generate placeholder audio for empty notes",
         ttsError
       );
-      await fs.promises.writeFile(emptyAudioFilePath, ""); // fallback to truly empty
+      // Copy the failure audio file instead of creating an empty one
+      await fs.promises.copyFile(FAILURE_AUDIO_PATH, emptyAudioFilePath);
+      logger.info(`Copied failure audio to ${emptyAudioFilePath}`);
     }
 
     const result: PodcastGenerationResult = {
       script: emptyScript,
       audioFile: emptyAudioFilePath,
       notes: [],
-      feedItems: feedItemsToProcess, // Still include the items we attempted to process
+      feedItems: feedItemsToProcess,
     };
     await fs.promises.writeFile(metadataPath, JSON.stringify(result, null, 2));
     return result;
@@ -809,8 +846,6 @@ export async function generateFullPodcast(
     logger.warn(
       "No audio segments were generated or downloaded. Creating an empty/placeholder podcast."
     );
-    // Create a truly empty or very short silent mp3.
-    // This logic could be identical to the one for "no items found" or "no notes generated"
     const emptyScriptForNoAudio =
       "An error occurred, and no audio content could be assembled for the podcast.";
     const emptyAudioFilePath = path.join(feedSpecificDir, "empty_final.mp3");
@@ -826,18 +861,20 @@ export async function generateFullPodcast(
         "Failed to generate placeholder audio for no-audio-segments case",
         ttsError
       );
-      await fs.promises.writeFile(emptyAudioFilePath, ""); // fallback
+      // Copy the failure audio file instead of creating an empty one
+      await fs.promises.copyFile(FAILURE_AUDIO_PATH, emptyAudioFilePath);
+      logger.info(`Copied failure audio to ${emptyAudioFilePath}`);
     }
 
     const result: PodcastGenerationResult = {
-      script: script || emptyScriptForNoAudio, // Use original script if available, else placeholder
+      script: script || emptyScriptForNoAudio,
       audioFile: emptyAudioFilePath,
       notes: resolvedArticleNotes.map((notes) => notes.notes),
       feedItems: feedItemsToProcess,
     };
     await fs.promises.writeFile(metadataPath, JSON.stringify(result, null, 2));
     logger.info(
-      `Podcast generation completed with placeholder audio due to no segments.`
+      `Podcast generation completed with failure audio due to no segments.`
     );
     return result;
   }

@@ -157,8 +157,13 @@ export default function App() {
   const [expandedDescription, setExpandedDescription] = useState(false);
   const [isTruncated, setIsTruncated] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const { startSession, stopSession, isSessionActive, updateSession } =
-    useRealtimeSession();
+  const {
+    startSession,
+    stopSession,
+    isSessionActive,
+    updateSession,
+    checkMicrophonePermission,
+  } = useRealtimeSession();
   const [sources, setSources] = useState<Source[]>(defaultSources);
   const [selectedSource, setSelectedSource] = useState<Source>(
     defaultSources[0]
@@ -185,6 +190,8 @@ export default function App() {
   const [isOpening, setIsOpening] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
+  const [hasMicrophonePermission, setHasMicrophonePermission] = useState(false);
+  const [isCheckingMicrophone, setIsCheckingMicrophone] = useState(false);
 
   const isToday = (date: Date) => {
     const today = new Date();
@@ -310,6 +317,19 @@ export default function App() {
       audioRef.current.addEventListener("ended", () => {
         setIsPlaying(false);
       });
+
+      // Add error handling
+      audioRef.current.addEventListener("error", (e) => {
+        console.error("Audio playback error:", e);
+        // Fall back to failure audio
+        if (audioRef.current) {
+          audioRef.current.src = `${API_BASE_URL}/public/podcast_failure.m4a`;
+          audioRef.current.load();
+          setError(
+            "Failed to load podcast audio. Playing error message instead."
+          );
+        }
+      });
     }
   }, []);
 
@@ -349,49 +369,31 @@ export default function App() {
     }
   };
 
-  // Add mouse/touch event handlers for push-to-talk
-  const handleMouseDown = async () => {
-    if (!aiActive && !aiLoading && podcastUrl) {
-      // Store current playback state
-      const wasPlaying = isPlaying;
-      if (wasPlaying) {
-        audioRef.current?.pause();
-      }
-      setAiActive(true);
-      setAiLoading(true);
-      try {
-        await startSession();
-        setAiLoading(false);
-      } catch (error) {
-        console.error("Failed to start AI session:", error);
-        setAiActive(false);
-        setError(
-          error instanceof Error
-            ? error.message
-            : "Failed to start AI session. Please check your microphone permissions."
-        );
-        // Resume playback if it was playing
-        if (wasPlaying) {
-          audioRef.current?.play();
-        }
-      } finally {
-        setAiLoading(false);
-      }
-    }
-  };
-
-  const handleMouseUp = () => {
-    if (aiActive) {
-      stopSession();
-      setAiActive(false);
-    }
-  };
-
   // Add event listeners for keyboard support
   useEffect(() => {
     const handleKeyDown = async (e: KeyboardEvent) => {
       if (e.code === "Space" && !aiActive && !aiLoading && podcastUrl) {
         e.preventDefault();
+        
+        // First handle microphone permission if needed
+        if (!hasMicrophonePermission) {
+          setIsCheckingMicrophone(true);
+          try {
+            const hasPermission = await checkMicrophonePermission();
+            setHasMicrophonePermission(hasPermission);
+            if (!hasPermission) {
+              setError("Microphone permission is required to use this feature");
+            }
+          } catch (error) {
+            console.error("Failed to check microphone permission:", error);
+            setError("Failed to access microphone");
+          } finally {
+            setIsCheckingMicrophone(false);
+          }
+          return; // Exit after handling permissions, don't start session
+        }
+
+        // Only proceed with session start if we have permission
         const wasPlaying = isPlaying;
         if (wasPlaying) {
           audioRef.current?.pause();
@@ -433,7 +435,7 @@ export default function App() {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [aiActive, aiLoading, podcastUrl, isPlaying]);
+  }, [aiActive, aiLoading, podcastUrl, isPlaying, hasMicrophonePermission]);
 
   // Add cleanup effect to ensure AI session is stopped when component unmounts
   useEffect(() => {
@@ -523,7 +525,22 @@ ${podcastMetadata.notes.join("\n\n")}`,
       } else {
         console.log("Setting regular playback data");
         setIsPodcastFeed(false);
-        setPodcastUrl(`${API_BASE_URL}${feedData.audioFile}`);
+        // Check if the audio file exists before setting it
+        const audioPath = `${API_BASE_URL}${feedData.audioFile}`;
+        fetch(audioPath, { method: "HEAD" })
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error("Audio file not found");
+            }
+            setPodcastUrl(audioPath);
+          })
+          .catch((error) => {
+            console.error("Error checking audio file:", error);
+            setPodcastUrl(`${API_BASE_URL}/public/podcast_failure.m4a`);
+            setError(
+              "Failed to load podcast audio. Playing error message instead."
+            );
+          });
         setPodcastMetadata(feedData);
       }
     } else {
@@ -1166,472 +1183,4 @@ ${podcastMetadata.notes.join("\n\n")}`,
                     >
                       <div className="flex items-center justify-center space-x-3">
                         <p
-                          className={`text-sm text-center ${
-                            isPodcastFeed ? "text-blue-800" : "text-purple-800"
-                          }`}
-                        >
-                          {isPodcastFeed
-                            ? "🎧 Playing original podcast audio directly"
-                            : `🤖 Personalized podcast by ${hostNames.join(" and ")}`}
-                        </p>
-                      </div>
-                      {isPodcastFeed &&
-                        podcastMetadata?.directPlaybackInfo?.feedInfo?.link && (
-                          <a
-                            href={
-                              podcastMetadata.directPlaybackInfo.feedInfo.link
-                            }
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-blue-600 hover:text-blue-800 mt-1 block text-center"
-                          >
-                            View original podcast →
-                          </a>
-                        )}
-                      {!isPodcastFeed && selectedSource?.url && (
-                        <a
-                          href={selectedSource.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-purple-600 hover:text-purple-800 mt-1 block text-center"
-                        >
-                          View original feed →
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Player Controls Section */}
-            <div className="px-4 pb-4">
-              <div className="space-y-4">
-                {/* Progress Bar */}
-                <div className="flex items-center space-x-4">
-                  <span className="text-sm text-gray-500">
-                    {formatTime(timestamp)}
-                  </span>
-                  <Slider
-                    value={[timestamp]}
-                    max={duration}
-                    step={1}
-                    onValueChange={(value) => handleSliderChange(value[0])}
-                    disabled={!podcastUrl}
-                  />
-                  <span className="text-sm text-gray-500">
-                    {formatTime(duration)}
-                  </span>
-                </div>
-
-                {/* Playback Controls */}
-                <div className="flex items-center justify-center space-x-4">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={rewind}
-                    disabled={!podcastUrl}
-                    className="w-12 h-12"
-                  >
-                    <RotateCcw className="h-6 w-6" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={togglePlay}
-                    disabled={!podcastUrl}
-                    className="w-16 h-16"
-                  >
-                    {isPlaying ? (
-                      <Pause className="h-8 w-8" />
-                    ) : (
-                      <Play className="h-8 w-8" />
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={fastForward}
-                    disabled={!podcastUrl}
-                    className="w-12 h-12"
-                  >
-                    <RotateCw className="h-6 w-6" />
-                  </Button>
-                </div>
-
-                {/* Playback Speed Controls */}
-                <div className="flex items-center justify-center space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSpeed(0.5)}
-                    disabled={!podcastUrl || playbackSpeed === 0.5}
-                  >
-                    0.5x
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSpeed(1)}
-                    disabled={!podcastUrl || playbackSpeed === 1}
-                  >
-                    1x
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSpeed(1.5)}
-                    disabled={!podcastUrl || playbackSpeed === 1.5}
-                  >
-                    1.5x
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSpeed(2)}
-                    disabled={!podcastUrl || playbackSpeed === 2}
-                  >
-                    2x
-                  </Button>
-                </div>
-
-                {/* AI Button */}
-                <div className="flex justify-center">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onMouseDown={handleMouseDown}
-                    onMouseUp={handleMouseUp}
-                    onMouseLeave={handleMouseUp}
-                    onTouchStart={handleMouseDown}
-                    onTouchEnd={handleMouseUp}
-                    disabled={!podcastUrl || aiLoading}
-                    className={`relative ${aiActive ? "bg-red-500 hover:bg-red-600" : ""} w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg`}
-                  >
-                    {aiLoading ? (
-                      <div className="animate-spin h-10 w-10 border-4 border-current border-t-transparent rounded-full" />
-                    ) : (
-                      <div className="flex flex-col items-center">
-                        <Mic className="h-10 w-10" />
-                        <span className="text-xs mt-1 font-medium">
-                          {aiActive ? "Release" : "Hold to talk"}
-                        </span>
-                      </div>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* Close Button */}
-            <div className="px-4 pb-4">
-              <Button
-                className="w-full"
-                variant="secondary"
-                onClick={handleClose}
-              >
-                Close
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Hidden audio element */}
-        <audio
-          ref={audioRef}
-          className="hidden"
-          src={podcastUrl || undefined}
-        />
-      </>
-    );
-  }
-
-  return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="flex flex-col items-center mb-8">
-        <img
-          src="/hosts.png"
-          alt="Hosts"
-          className="w-40 h-40 mb-4 rounded-full object-cover"
-        />
-        <h1 className="text-3xl font-bold">{getPodcastTitle()}</h1>
-        <div className="flex space-x-4 hidden">
-          <Button variant="outline" onClick={() => setShowDebug(!showDebug)}>
-            {showDebug ? "Hide Debug" : "Show Debug"}
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div>
-          <Card>
-            <CardHeader>
-              <div className="flex flex-col md:flex-row items-center md:items-start space-y-4 md:space-y-0 md:space-x-4">
-                {podcastMetadata?.directPlaybackInfo && (
-                  <img
-                    src={getArtworkSrc()}
-                    alt={
-                      podcastMetadata.directPlaybackInfo.title ||
-                      "Podcast artwork"
-                    }
-                    className="w-48 h-48 md:w-24 md:h-24 rounded-lg object-cover flex-shrink-0 shadow-lg"
-                    onError={(e) => {
-                      const img = e.target as HTMLImageElement;
-                      img.style.display = "none";
-                    }}
-                  />
-                )}
-                <div className="flex-1 min-w-0 text-center md:text-left">
-                  <CardTitle className="text-lg">
-                    {podcastMetadata?.directPlaybackInfo?.title ||
-                      podcastMetadata?.directPlaybackInfo?.feedInfo?.title ||
-                      selectedSource?.name ||
-                      "Podcast Player"}
-                  </CardTitle>
-                  {isPodcastFeed &&
-                    podcastMetadata?.directPlaybackInfo?.feedInfo?.title && (
-                      <div className="text-sm font-normal text-gray-600 mt-1 truncate">
-                        {podcastMetadata.directPlaybackInfo.feedInfo.title}
-                      </div>
-                    )}
-                  {isPodcastFeed &&
-                    podcastMetadata?.directPlaybackInfo?.pubDate && (
-                      <div className="text-xs text-gray-500 mt-1">
-                        Published:{" "}
-                        {new Date(
-                          podcastMetadata.directPlaybackInfo.pubDate
-                        ).toLocaleDateString()}
-                      </div>
-                    )}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {isPodcastFeed && (
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-blue-800">
-                          🎧 Playing original podcast audio directly
-                        </p>
-                        {podcastMetadata?.directPlaybackInfo?.feedInfo
-                          ?.link && (
-                          <a
-                            href={
-                              podcastMetadata.directPlaybackInfo.feedInfo.link
-                            }
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-blue-600 hover:text-blue-800 mt-1 inline-block"
-                          >
-                            View original podcast →
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {isPodcastFeed &&
-                  podcastMetadata?.directPlaybackInfo?.description && (
-                    <div className="mt-2">
-                      <div
-                        ref={descriptionRef}
-                        className={`text-sm text-gray-600 prose prose-sm max-w-none ${!expandedDescription ? "line-clamp-2" : ""}`}
-                        dangerouslySetInnerHTML={{
-                          __html: DOMPurify.sanitize(
-                            podcastMetadata.directPlaybackInfo.description
-                          ),
-                        }}
-                      />
-                      {isTruncated && (
-                        <button
-                          onClick={() =>
-                            setExpandedDescription(!expandedDescription)
-                          }
-                          className="text-sm text-blue-600 hover:text-blue-800 mt-1"
-                        >
-                          {expandedDescription ? "Show less" : "Read more"}
-                        </button>
-                      )}
-                    </div>
-                  )}
-                <audio
-                  ref={audioRef}
-                  className="hidden"
-                  src={podcastUrl || undefined}
-                />
-
-                {/* Central Microphone Button */}
-                <div className="flex justify-center mb-6">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onMouseDown={handleMouseDown}
-                    onMouseUp={handleMouseUp}
-                    onMouseLeave={handleMouseUp}
-                    onTouchStart={handleMouseDown}
-                    onTouchEnd={handleMouseUp}
-                    disabled={!podcastUrl || aiLoading}
-                    className={`relative ${aiActive ? "bg-red-500 hover:bg-red-600" : ""} w-24 h-24 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110 shadow-lg`}
-                  >
-                    {aiLoading ? (
-                      <div className="animate-spin h-12 w-12 border-4 border-current border-t-transparent rounded-full" />
-                    ) : (
-                      <div className="flex flex-col items-center">
-                        <Mic className="h-12 w-12" />
-                        <span className="text-sm mt-2 font-medium">
-                          {aiActive ? "Release to stop" : "Hold to talk"}
-                        </span>
-                      </div>
-                    )}
-                  </Button>
-                </div>
-
-                {/* Progress Bar */}
-                <div className="flex items-center space-x-4">
-                  <span className="text-sm text-gray-500">
-                    {formatTime(timestamp)}
-                  </span>
-                  <Slider
-                    value={[timestamp]}
-                    max={duration}
-                    step={1}
-                    onValueChange={(value) => handleSliderChange(value[0])}
-                    disabled={!podcastUrl}
-                  />
-                  <span className="text-sm text-gray-500">
-                    {formatTime(duration)}
-                  </span>
-                </div>
-
-                {/* Playback Controls */}
-                <div className="flex items-center justify-center space-x-4">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={rewind}
-                    disabled={!podcastUrl}
-                    className="w-12 h-12"
-                  >
-                    <RotateCcw className="h-6 w-6" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={togglePlay}
-                    disabled={!podcastUrl}
-                    className="w-16 h-16"
-                  >
-                    {isPlaying ? (
-                      <Pause className="h-8 w-8" />
-                    ) : (
-                      <Play className="h-8 w-8" />
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={fastForward}
-                    disabled={!podcastUrl}
-                    className="w-12 h-12"
-                  >
-                    <RotateCw className="h-6 w-6" />
-                  </Button>
-                </div>
-
-                {/* Playback Speed Controls */}
-                <div className="flex items-center justify-center space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSpeed(0.5)}
-                    disabled={!podcastUrl || playbackSpeed === 0.5}
-                  >
-                    0.5x
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSpeed(1)}
-                    disabled={!podcastUrl || playbackSpeed === 1}
-                  >
-                    1x
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSpeed(1.5)}
-                    disabled={!podcastUrl || playbackSpeed === 1.5}
-                  >
-                    1.5x
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSpeed(2)}
-                    disabled={!podcastUrl || playbackSpeed === 2}
-                  >
-                    2x
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div>
-          <SourceSelector
-            sources={sources}
-            selectedSource={selectedSource}
-            onSourceChange={handleSourceChange}
-            onAddCustomSource={handleAddCustomSource}
-          />
-
-          <div className="flex justify-center mt-8">
-            {isGenerating && (
-              <div className="flex items-center justify-center">
-                <svg
-                  className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  ></circle>
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
-                </svg>
-                Processing feeds...
-              </div>
-            )}
-          </div>
-
-          {error && (
-            <div className="p-4 mt-8 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-red-600">{error}</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {showDebug && <DebugPage />}
-    </div>
-  );
-}
-
-// Helper function to format time in MM:SS
-function formatTime(seconds: number): string {
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = Math.floor(seconds % 60);
-  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
-}
+                          className={`

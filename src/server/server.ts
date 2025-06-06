@@ -59,7 +59,70 @@ app.use(
 );
 
 // Serve static files from the podcasts directory
-router.use("/podcasts", express.static(PODCASTS_DIR));
+router.use(
+  "/podcasts",
+  async (req, res, next) => {
+    const failureAudioPath = path.join(
+      process.cwd(),
+      "public",
+      "podcast_failure.m4a"
+    );
+
+    // Check if the requested file exists
+    const requestedPath = path.join(PODCASTS_DIR, req.path);
+    if (!fs.existsSync(requestedPath)) {
+      console.warn(
+        `File not found: ${requestedPath}, serving failure audio instead`
+      );
+      res.sendFile(failureAudioPath);
+      return;
+    }
+
+    try {
+      // Check file size
+      const stats = await fs.promises.stat(requestedPath);
+      if (stats.size === 0) {
+        console.warn(
+          `File is empty: ${requestedPath}, serving failure audio instead`
+        );
+        res.sendFile(failureAudioPath);
+        return;
+      }
+
+      // If we have a range request, verify the range is valid
+      const range = req.headers.range;
+      if (range) {
+        const parts = range.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : stats.size - 1;
+
+        if (start >= stats.size || end >= stats.size) {
+          console.warn(
+            `Invalid range request for ${requestedPath}, serving failure audio instead`
+          );
+          res.sendFile(failureAudioPath);
+          return;
+        }
+      }
+
+      // If we get here, the file exists and is valid
+      next();
+    } catch (error) {
+      console.error(`Error checking file ${requestedPath}:`, error);
+      res.sendFile(failureAudioPath);
+    }
+  },
+  express.static(PODCASTS_DIR, {
+    setHeaders: (res, path) => {
+      // Set appropriate headers for audio files
+      if (path.endsWith(".mp3")) {
+        res.set("Content-Type", "audio/mpeg");
+      } else if (path.endsWith(".m4a")) {
+        res.set("Content-Type", "audio/mp4");
+      }
+    },
+  })
+);
 
 export type VoiceOption = "Rachel" | "Daniel";
 
