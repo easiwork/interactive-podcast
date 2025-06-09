@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Link,
+  RefreshCw,
 } from "lucide-react";
 import { useRealtimeSession } from "./components/useRealtimeSession";
 import { DebugPage } from "./components/DebugPage";
@@ -58,6 +59,8 @@ interface PodcastMetadata {
   audioFile: string;
   notes: string[];
   stories: Story[];
+  failed?: boolean;
+  failureReason?: string;
   isDirectPlayback?: boolean;
   directPlaybackInfo?: {
     title: string;
@@ -190,6 +193,13 @@ export default function App() {
   const [isButtonHeld, setIsButtonHeld] = useState(false);
   const isButtonHeldRef = useRef(false);
 
+  // Check if debug mode is enabled via query parameter
+  const isDebugMode = () => {
+    if (typeof window === "undefined") return false;
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get("debug") === "true";
+  };
+
   const isToday = (date: Date) => {
     const today = new Date();
     return (
@@ -274,7 +284,18 @@ export default function App() {
         } else {
           console.log("Updating UI with regular playback data");
           setIsPodcastFeed(false);
-          setPodcastUrl(`${API_BASE_URL}${data.audioFile}`);
+
+          // Handle failed podcasts
+          if (data.failed) {
+            console.log("Podcast generation failed:", data.failureReason);
+            setPodcastUrl(data.audioFile); // This should be "/podcast_fail.m4a"
+            setError(
+              `Podcast generation failed: ${data.failureReason || "Unknown error"}`
+            );
+          } else {
+            setPodcastUrl(`${API_BASE_URL}${data.audioFile}`);
+          }
+
           setPodcastMetadata(data);
         }
       }
@@ -287,18 +308,34 @@ export default function App() {
   };
 
   // Process all feeds on initial load
-  useEffect(() => {
-    const processAllFeeds = async () => {
-      setIsGenerating(true);
-      try {
-        // Process feeds in parallel
-        await Promise.all(sources.map((source) => processFeed(source)));
-      } finally {
-        setIsGenerating(false);
+  // Manual reload function instead of automatic processing
+  const handleReload = async (forceRegenerate: boolean = false) => {
+    setIsGenerating(true);
+    try {
+      // Call the reload endpoint
+      const reloadResponse = await fetch(
+        `${API_BASE_URL}/reload?force=${forceRegenerate}`,
+        {
+          method: "GET",
+        }
+      );
+
+      if (!reloadResponse.ok) {
+        throw new Error("Failed to trigger reload");
       }
-    };
-    processAllFeeds();
-  }, []); // Only run on mount
+
+      const reloadData = await reloadResponse.json();
+      console.log("Reload triggered:", reloadData);
+
+      // Then process feeds in parallel
+      await Promise.all(sources.map((source) => processFeed(source)));
+    } catch (error) {
+      console.error("Failed to reload feeds:", error);
+      setError("Failed to reload feeds. Please try again.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   useEffect(() => {
     // Initialize audio element
@@ -585,8 +622,20 @@ ${podcastMetadata.notes.join("\n\n")}`,
   };
 
   const handleSourceChange = (source: Source) => {
+    // Reset audio player state first
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current.src = "";
+    }
+    setIsPlaying(false);
+    setTimestamp(0);
+    setDuration(0);
+
+    // Reset UI state
     setSelectedSource(source);
     setError(null);
+    setExpandedDescription(false);
 
     // Use the preprocessed data if available
     const feedData = processedFeeds[source.id];
@@ -637,7 +686,18 @@ ${podcastMetadata.notes.join("\n\n")}`,
       } else {
         console.log("Setting regular playback data");
         setIsPodcastFeed(false);
-        setPodcastUrl(`${API_BASE_URL}${feedData.audioFile}`);
+
+        // Handle failed podcasts from cache
+        if (feedData.failed) {
+          console.log("Cached podcast failed:", feedData.failureReason);
+          setPodcastUrl(feedData.audioFile); // This should be "/podcast_fail.m4a"
+          setError(
+            `Podcast generation failed: ${feedData.failureReason || "Unknown error"}`
+          );
+        } else {
+          setPodcastUrl(`${API_BASE_URL}${feedData.audioFile}`);
+        }
+
         setPodcastMetadata(feedData);
       }
     } else {
@@ -984,6 +1044,52 @@ ${podcastMetadata.notes.join("\n\n")}`,
     setIsDragging(false);
   };
 
+  // Handle podcast URL changes
+  useEffect(() => {
+    if (audioRef.current && podcastUrl) {
+      // Store current playback rate
+      const currentRate = audioRef.current.playbackRate;
+
+      // Reset audio player state
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+
+      // Set new source and load
+      audioRef.current.src = podcastUrl;
+      audioRef.current.load();
+
+      // Restore playback rate
+      audioRef.current.playbackRate = currentRate;
+
+      // Reset UI state
+      setIsPlaying(false);
+      setTimestamp(0);
+      setDuration(0);
+
+      // Add event listeners for metadata and timeupdate
+      const handleMetadataLoaded = () => {
+        setDuration(audioRef.current?.duration || 0);
+      };
+
+      const handleTimeUpdate = () => {
+        setTimestamp(audioRef.current?.currentTime || 0);
+      };
+
+      audioRef.current.addEventListener("loadedmetadata", handleMetadataLoaded);
+      audioRef.current.addEventListener("timeupdate", handleTimeUpdate);
+
+      return () => {
+        if (audioRef.current) {
+          audioRef.current.removeEventListener(
+            "loadedmetadata",
+            handleMetadataLoaded
+          );
+          audioRef.current.removeEventListener("timeupdate", handleTimeUpdate);
+        }
+      };
+    }
+  }, [podcastUrl]);
+
   // --- MOBILE PLAYER FOOTER ---
   if (isMobile) {
     return (
@@ -1086,9 +1192,39 @@ ${podcastMetadata.notes.join("\n\n")}`,
               </div>
             )}
 
-            {isGenerating && (
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-blue-800">Processing feeds...</p>
+            {/* Reload Controls - only show in debug mode */}
+            {isDebugMode() && (
+              <div className="flex flex-col space-y-2">
+                <div className="flex space-x-2">
+                  <Button
+                    onClick={() => handleReload(false)}
+                    disabled={isGenerating}
+                    className="flex-1"
+                    variant="outline"
+                  >
+                    <RefreshCw
+                      className={`h-4 w-4 mr-2 ${isGenerating ? "animate-spin" : ""}`}
+                    />
+                    {isGenerating ? "Processing..." : "Reload Feeds"}
+                  </Button>
+                  <Button
+                    onClick={() => handleReload(true)}
+                    disabled={isGenerating}
+                    variant="outline"
+                    className="flex-shrink-0"
+                  >
+                    <RefreshCw
+                      className={`h-4 w-4 mr-1 ${isGenerating ? "animate-spin" : ""}`}
+                    />
+                    Force
+                  </Button>
+                </div>
+
+                {isGenerating && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-blue-800 text-sm">Processing feeds...</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1273,20 +1409,28 @@ ${podcastMetadata.notes.join("\n\n")}`,
                   <div className="w-full">
                     <div
                       className={`p-3 rounded-lg border ${
-                        isPodcastFeed
-                          ? "bg-blue-50 border-blue-200"
-                          : "bg-purple-50 border-purple-200"
+                        podcastMetadata.failed
+                          ? "bg-red-50 border-red-200"
+                          : isPodcastFeed
+                            ? "bg-blue-50 border-blue-200"
+                            : "bg-purple-50 border-purple-200"
                       }`}
                     >
                       <div className="flex items-center justify-center space-x-3">
                         <p
                           className={`text-sm text-center ${
-                            isPodcastFeed ? "text-blue-800" : "text-purple-800"
+                            podcastMetadata.failed
+                              ? "text-red-800"
+                              : isPodcastFeed
+                                ? "text-blue-800"
+                                : "text-purple-800"
                           }`}
                         >
-                          {isPodcastFeed
-                            ? "🎧 Playing original podcast audio directly"
-                            : `🤖 Personalized podcast by ${hostNames.join(" and ")}`}
+                          {podcastMetadata.failed
+                            ? "❌ Podcast generation failed"
+                            : isPodcastFeed
+                              ? "🎧 Playing original podcast audio directly"
+                              : `🤖 Personalized podcast by ${hostNames.join(" and ")}`}
                         </p>
                       </div>
                       {isPodcastFeed &&
@@ -1530,12 +1674,26 @@ ${podcastMetadata.notes.join("\n\n")}`,
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {isPodcastFeed && (
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                {(isPodcastFeed || podcastMetadata?.failed) && (
+                  <div
+                    className={`p-3 border rounded-lg ${
+                      podcastMetadata?.failed
+                        ? "bg-red-50 border-red-200"
+                        : "bg-blue-50 border-blue-200"
+                    }`}
+                  >
                     <div className="flex items-center space-x-3">
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-blue-800">
-                          🎧 Playing original podcast audio directly
+                        <p
+                          className={`text-sm ${
+                            podcastMetadata?.failed
+                              ? "text-red-800"
+                              : "text-blue-800"
+                          }`}
+                        >
+                          {podcastMetadata?.failed
+                            ? "❌ Podcast generation failed"
+                            : "🎧 Playing original podcast audio directly"}
                         </p>
                         {podcastMetadata?.directPlaybackInfo?.feedInfo
                           ?.link && (
@@ -1717,6 +1875,41 @@ ${podcastMetadata.notes.join("\n\n")}`,
             onSourceChange={handleSourceChange}
             onAddCustomSource={handleAddCustomSource}
           />
+
+          {/* Reload Controls for Desktop - only show in debug mode */}
+          {isDebugMode() && (
+            <div className="flex flex-col space-y-4 mt-6">
+              <div className="flex space-x-4 justify-center">
+                <Button
+                  onClick={() => handleReload(false)}
+                  disabled={isGenerating}
+                  variant="outline"
+                  className="min-w-[140px]"
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 mr-2 ${isGenerating ? "animate-spin" : ""}`}
+                  />
+                  {isGenerating ? "Processing..." : "Reload Feeds"}
+                </Button>
+                <Button
+                  onClick={() => handleReload(true)}
+                  disabled={isGenerating}
+                  variant="outline"
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 mr-2 ${isGenerating ? "animate-spin" : ""}`}
+                  />
+                  Force Reload
+                </Button>
+              </div>
+
+              {isGenerating && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-center">
+                  <p className="text-blue-800 text-sm">Processing feeds...</p>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex justify-center mt-8">
             {isGenerating && (

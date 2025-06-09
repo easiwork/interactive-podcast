@@ -76,6 +76,8 @@ export interface PodcastGenerationResult {
   audioFile: string;
   notes: string[];
   feedItems: FeedItem[];
+  failed?: boolean;
+  failureReason?: string;
 }
 
 export interface ArticleNotes {
@@ -791,14 +793,47 @@ export async function generateFullPodcast(
         await fs.promises.writeFile(filepath, audioBuffer);
         tempAudioFiles.push(filepath);
         logger.info(`Saved TTS audio file ${filepath}`);
-      } catch (error) {
+      } catch (error: any) {
         logger.error(
           `Failed to generate TTS audio for line ${i} ("${line}"):`,
           error
         );
-        // Optionally, add a silent segment or a "content missing" TTS
-        // For now, we just log and the final podcast will be missing this segment.
-        // Consider how critical failure here is.
+
+        // Check if this is a critical failure (like API authentication)
+        if (
+          error.statusCode === 401 ||
+          error.message?.includes("Status code: 401")
+        ) {
+          logger.error(
+            `Critical TTS failure detected (401 Unauthorized). Cancelling podcast generation.`
+          );
+
+          // Create failure result with podcast_fail.m4a
+          const failAudioPath = path.join(
+            process.cwd(),
+            "public",
+            "podcast_fail.m4a"
+          );
+          const result: PodcastGenerationResult = {
+            script: "Podcast generation failed due to authentication error",
+            audioFile: failAudioPath,
+            notes: ["Podcast generation failed"],
+            feedItems: feedItemsToProcess,
+            failed: true,
+            failureReason: "TTS API authentication failed",
+          };
+
+          // Save the failure metadata
+          await fs.promises.writeFile(
+            metadataPath,
+            JSON.stringify(result, null, 2)
+          );
+          logger.info(`Podcast generation failed - saved failure metadata`);
+          return result;
+        }
+
+        // For non-critical errors, continue but log the issue
+        logger.warn(`Non-critical TTS error, continuing generation...`);
       }
     }
   }
@@ -821,11 +856,40 @@ export async function generateFullPodcast(
         host1Voice
       );
       await fs.promises.writeFile(emptyAudioFilePath, audioBuffer);
-    } catch (ttsError) {
+    } catch (ttsError: any) {
       logger.error(
         "Failed to generate placeholder audio for no-audio-segments case",
         ttsError
       );
+
+      // Check if this is a critical failure
+      if (
+        ttsError.statusCode === 401 ||
+        ttsError.message?.includes("Status code: 401")
+      ) {
+        logger.error(
+          `Critical TTS failure in fallback audio generation. Using podcast_fail.m4a`
+        );
+        const failAudioPath = path.join(
+          process.cwd(),
+          "public",
+          "podcast_fail.m4a"
+        );
+        const result: PodcastGenerationResult = {
+          script: script || emptyScriptForNoAudio,
+          audioFile: failAudioPath,
+          notes: resolvedArticleNotes.map((notes) => notes.notes),
+          feedItems: feedItemsToProcess,
+          failed: true,
+          failureReason: "TTS API authentication failed in fallback generation",
+        };
+        await fs.promises.writeFile(
+          metadataPath,
+          JSON.stringify(result, null, 2)
+        );
+        return result;
+      }
+
       await fs.promises.writeFile(emptyAudioFilePath, ""); // fallback
     }
 
@@ -845,10 +909,53 @@ export async function generateFullPodcast(
   // const combinedAudioPath = path.join(feedSpecificDir, "podcast_segments"); // Old: this was a directory
   const finalCombinedAudioPath = path.join(feedSpecificDir, "podcast.mp3"); // New: This is the final file path
   // await combineAudioFiles(tempAudioFiles, combinedAudioPath); // Old
-  await combineAudioFiles(tempAudioFiles, finalCombinedAudioPath); // New
-  logger.info(
-    `Successfully combined all audio segments into ${finalCombinedAudioPath}`
-  );
+
+  try {
+    await combineAudioFiles(tempAudioFiles, finalCombinedAudioPath); // New
+    logger.info(
+      `Successfully combined all audio segments into ${finalCombinedAudioPath}`
+    );
+
+    // Validate that the combined audio file exists and has content
+    try {
+      const stats = await fs.promises.stat(finalCombinedAudioPath);
+      if (stats.size === 0) {
+        throw new Error("Generated audio file is empty");
+      }
+      logger.info(`Generated audio file is valid, size: ${stats.size} bytes`);
+    } catch (statError: any) {
+      throw new Error(
+        `Generated audio file validation failed: ${statError.message}`
+      );
+    }
+  } catch (combineError: any) {
+    logger.error(
+      `Failed to combine audio files. Error: ${combineError.message}`,
+      combineError
+    );
+
+    // Return failure result with podcast_fail.m4a
+    const failAudioPath = path.join(
+      process.cwd(),
+      "public",
+      "podcast_fail.m4a"
+    );
+    const result: PodcastGenerationResult = {
+      script,
+      audioFile: failAudioPath,
+      notes: resolvedArticleNotes.map((notes) => notes.notes),
+      feedItems: feedItemsToProcess,
+      failed: true,
+      failureReason: "Failed to combine audio segments",
+    };
+
+    // Save the failure metadata
+    await fs.promises.writeFile(metadataPath, JSON.stringify(result, null, 2));
+    logger.info(
+      `Podcast generation failed during audio combination - saved failure metadata`
+    );
+    return result;
+  }
 
   const result: PodcastGenerationResult = {
     script,

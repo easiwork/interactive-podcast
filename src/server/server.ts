@@ -58,8 +58,42 @@ app.use(
   })
 );
 
-// Serve static files from the podcasts directory
-router.use("/podcasts", express.static(PODCASTS_DIR));
+// Serve static files from the podcasts directory with error handling
+router.use("/podcasts", (req, res, next) => {
+  const staticHandler = express.static(PODCASTS_DIR);
+  staticHandler(req, res, (err) => {
+    if (err) {
+      console.error(
+        `[${new Date().toISOString()}] Static file serving error for ${req.path}:`,
+        err.message
+      );
+
+      // Handle Range Not Satisfiable and other file serving errors
+      if (
+        err.message?.includes("Range Not Satisfiable") ||
+        err.status === 416 ||
+        err.statusCode === 416
+      ) {
+        console.error(
+          `Range Not Satisfiable error for ${req.path}. Redirecting to failure audio.`
+        );
+        return res.redirect("/podcast_fail.m4a");
+      }
+
+      // For other static file errors, also redirect to failure audio
+      if (err.status >= 400) {
+        console.error(
+          `Static file error (${err.status}) for ${req.path}. Redirecting to failure audio.`
+        );
+        return res.redirect("/podcast_fail.m4a");
+      }
+    }
+    next(err);
+  });
+});
+
+// Serve static files from the public directory
+router.use("/", express.static(path.join(process.cwd(), "public")));
 
 export type VoiceOption = "Rachel" | "Daniel";
 
@@ -170,6 +204,39 @@ router.post("/debug/generate-script", async (_, res) => {
   }
 });
 
+// New reload endpoint for processing feeds on demand
+router.get("/reload", async (req, res) => {
+  try {
+    const { date, force } = req.query as {
+      date?: string;
+      force?: string;
+    };
+
+    // Parse the date parameter or use current date
+    const targetDate = date ? new Date(date) : new Date();
+    const dateString = targetDate.toISOString().split("T")[0]; // YYYY-MM-DD format
+
+    // Parse the force parameter
+    const forceRegenerate = force === "true";
+
+    console.log(
+      `Reload endpoint called - Date: ${dateString}, Force: ${forceRegenerate}`
+    );
+
+    // For now, return the processing date - in the future this could trigger
+    // background processing of all feeds or specific feed processing
+    res.json({
+      message: "Reload endpoint ready",
+      lastProcessingDate: dateString,
+      force: forceRegenerate,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Failed to process reload:", error);
+    res.status(500).json({ error: "Failed to process reload request" });
+  }
+});
+
 // Endpoint for generating a full podcast
 router.post("/generate-podcast", async (req, res) => {
   try {
@@ -225,14 +292,23 @@ router.post("/generate-podcast", async (req, res) => {
         },
       });
     } else {
-      // For generated podcasts, convert the file system path to a web-accessible URL
-      const relativePath = path.relative(process.cwd(), result.audioFile);
-      const audioUrl = `/${relativePath.replace(/\\/g, "/")}`;
+      // Check if this is a failed podcast
+      if (result.failed && result.audioFile.includes("podcast_fail.m4a")) {
+        // Return the failure audio as a web-accessible URL
+        res.json({
+          ...result,
+          audioFile: "/podcast_fail.m4a",
+        });
+      } else {
+        // For generated podcasts, convert the file system path to a web-accessible URL
+        const relativePath = path.relative(process.cwd(), result.audioFile);
+        const audioUrl = `/${relativePath.replace(/\\/g, "/")}`;
 
-      res.json({
-        ...result,
-        audioFile: audioUrl,
-      });
+        res.json({
+          ...result,
+          audioFile: audioUrl,
+        });
+      }
     }
   } catch (error) {
     console.error("Failed to generate podcast:", error);
@@ -364,6 +440,35 @@ if (process.env.NODE_ENV !== "development") {
 // Handle 404 for unknown routes
 app.use((_, res) => {
   res.status(404).send("Not Found");
+});
+
+// Global error handler for unhandled errors
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error(`[${new Date().toISOString()}] Unhandled error:`, err.message);
+
+  // Handle Range Not Satisfiable errors globally
+  if (
+    err.message?.includes("Range Not Satisfiable") ||
+    err.status === 416 ||
+    err.statusCode === 416
+  ) {
+    console.error(
+      `Global Range Not Satisfiable error for ${req.path}. Redirecting to failure audio.`
+    );
+    return res.redirect("/podcast_fail.m4a");
+  }
+
+  // Handle other file serving errors
+  if (err.status >= 400 && err.status < 500) {
+    console.error(`Global client error (${err.status}) for ${req.path}.`);
+    return res
+      .status(err.status)
+      .json({ error: err.message || "Client error" });
+  }
+
+  // Handle server errors
+  console.error(`Global server error for ${req.path}:`, err);
+  res.status(500).json({ error: "Internal server error" });
 });
 
 const PORT = process.env.PORT || 3000;
