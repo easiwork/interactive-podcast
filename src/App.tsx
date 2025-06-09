@@ -185,6 +185,10 @@ export default function App() {
   const [isOpening, setIsOpening] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
+  const [hasMicPermission, setHasMicPermission] = useState(false);
+  const [isRequestingPermission, setIsRequestingPermission] = useState(false);
+  const [isButtonHeld, setIsButtonHeld] = useState(false);
+  const isButtonHeldRef = useRef(false);
 
   const isToday = (date: Date) => {
     const today = new Date();
@@ -349,39 +353,115 @@ export default function App() {
     }
   };
 
+  const requestMicrophonePermission = async () => {
+    if (hasMicPermission) return;
+
+    setIsRequestingPermission(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video: false,
+      });
+      // Stop the stream immediately after getting permission
+      stream.getTracks().forEach((track) => track.stop());
+      setHasMicPermission(true);
+    } catch (error) {
+      console.error("Failed to get microphone permission:", error);
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Failed to get microphone permission. Please check your browser settings."
+      );
+    } finally {
+      setIsRequestingPermission(false);
+    }
+  };
+
   // Add mouse/touch event handlers for push-to-talk
   const handleMouseDown = async () => {
-    if (!aiActive && !aiLoading && podcastUrl) {
-      // Store current playback state
-      const wasPlaying = isPlaying;
-      if (wasPlaying) {
-        audioRef.current?.pause();
-      }
-      setAiActive(true);
-      setAiLoading(true);
-      try {
-        await startSession();
-        setAiLoading(false);
-      } catch (error) {
-        console.error("Failed to start AI session:", error);
-        setAiActive(false);
-        setError(
-          error instanceof Error
-            ? error.message
-            : "Failed to start AI session. Please check your microphone permissions."
+    console.log(
+      "Mouse down - hasMicPermission:",
+      hasMicPermission,
+      "isButtonHeld:",
+      isButtonHeld,
+      "aiLoading:",
+      aiLoading
+    );
+
+    // First check if we need to request permission
+    if (!hasMicPermission) {
+      await requestMicrophonePermission();
+      return;
+    }
+
+    // Only proceed if button isn't already held and we have a podcast
+    if (isButtonHeld || aiLoading || !podcastUrl) {
+      return;
+    }
+
+    setIsButtonHeld(true);
+    isButtonHeldRef.current = true;
+    console.log("Button held set to true");
+
+    // Store current playback state
+    const wasPlaying = isPlaying;
+    if (wasPlaying) {
+      audioRef.current?.pause();
+    }
+
+    setAiActive(true);
+    setAiLoading(true);
+
+    try {
+      await startSession();
+      setAiLoading(false);
+      console.log(
+        "Session started, checking if button still held:",
+        isButtonHeldRef.current
+      );
+
+      // Check if button was released while we were starting the session
+      if (!isButtonHeldRef.current) {
+        console.log(
+          "Button was released during session start, stopping session"
         );
-        // Resume playback if it was playing
-        if (wasPlaying) {
-          audioRef.current?.play();
-        }
-      } finally {
-        setAiLoading(false);
+        stopSession();
+        setAiActive(false);
       }
+    } catch (error) {
+      console.error("Failed to start AI session:", error);
+      setAiActive(false);
+      setIsButtonHeld(false);
+      isButtonHeldRef.current = false;
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Failed to start AI session. Please check your microphone permissions."
+      );
+      // Resume playback if it was playing
+      if (wasPlaying) {
+        audioRef.current?.play();
+      }
+    } finally {
+      setAiLoading(false);
     }
   };
 
   const handleMouseUp = () => {
+    console.log(
+      "Mouse up - was button held:",
+      isButtonHeld,
+      "aiActive:",
+      aiActive
+    );
+    setIsButtonHeld(false);
+    isButtonHeldRef.current = false;
     if (aiActive) {
+      console.log("Stopping session on mouse up");
       stopSession();
       setAiActive(false);
     }
@@ -390,20 +470,46 @@ export default function App() {
   // Add event listeners for keyboard support
   useEffect(() => {
     const handleKeyDown = async (e: KeyboardEvent) => {
-      if (e.code === "Space" && !aiActive && !aiLoading && podcastUrl) {
+      if (
+        e.code === "Space" &&
+        hasMicPermission &&
+        !isButtonHeld &&
+        !aiLoading &&
+        podcastUrl
+      ) {
         e.preventDefault();
+        console.log("Space key down - starting session");
+
+        setIsButtonHeld(true);
+        isButtonHeldRef.current = true;
         const wasPlaying = isPlaying;
         if (wasPlaying) {
           audioRef.current?.pause();
         }
         setAiActive(true);
         setAiLoading(true);
+
         try {
           await startSession();
           setAiLoading(false);
+          console.log(
+            "Session started via keyboard, checking if key still held:",
+            isButtonHeldRef.current
+          );
+
+          // Check if key was released while we were starting the session
+          if (!isButtonHeldRef.current) {
+            console.log(
+              "Key was released during session start, stopping session"
+            );
+            stopSession();
+            setAiActive(false);
+          }
         } catch (error) {
           console.error("Failed to start AI session:", error);
           setAiActive(false);
+          setIsButtonHeld(false);
+          isButtonHeldRef.current = false;
           setError(
             error instanceof Error
               ? error.message
@@ -419,10 +525,21 @@ export default function App() {
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.code === "Space" && aiActive) {
+      if (e.code === "Space") {
         e.preventDefault();
-        stopSession();
-        setAiActive(false);
+        console.log(
+          "Space key up - was button held:",
+          isButtonHeld,
+          "aiActive:",
+          aiActive
+        );
+        setIsButtonHeld(false);
+        isButtonHeldRef.current = false;
+        if (aiActive) {
+          console.log("Stopping session on key up");
+          stopSession();
+          setAiActive(false);
+        }
       }
     };
 
@@ -433,17 +550,14 @@ export default function App() {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [aiActive, aiLoading, podcastUrl, isPlaying]);
-
-  // Add cleanup effect to ensure AI session is stopped when component unmounts
-  useEffect(() => {
-    return () => {
-      if (aiActive) {
-        stopSession();
-        setAiActive(false);
-      }
-    };
-  }, [aiActive]);
+  }, [
+    isButtonHeld,
+    aiLoading,
+    podcastUrl,
+    isPlaying,
+    hasMicPermission,
+    aiActive,
+  ]);
 
   // Sync AI session state with our local state
   useEffect(() => {
@@ -1305,16 +1419,24 @@ ${podcastMetadata.notes.join("\n\n")}`,
                     onMouseLeave={handleMouseUp}
                     onTouchStart={handleMouseDown}
                     onTouchEnd={handleMouseUp}
-                    disabled={!podcastUrl || aiLoading}
+                    disabled={
+                      !podcastUrl || aiLoading || isRequestingPermission
+                    }
                     className={`relative ${aiActive ? "bg-red-500 hover:bg-red-600" : ""} w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg`}
                   >
                     {aiLoading ? (
+                      <div className="animate-spin h-10 w-10 border-4 border-current border-t-transparent rounded-full" />
+                    ) : isRequestingPermission ? (
                       <div className="animate-spin h-10 w-10 border-4 border-current border-t-transparent rounded-full" />
                     ) : (
                       <div className="flex flex-col items-center">
                         <Mic className="h-10 w-10" />
                         <span className="text-xs mt-1 font-medium">
-                          {aiActive ? "Release" : "Hold to talk"}
+                          {aiActive
+                            ? "Release"
+                            : hasMicPermission
+                              ? "Hold to talk"
+                              : "Tap for mic"}
                         </span>
                       </div>
                     )}
@@ -1472,16 +1594,24 @@ ${podcastMetadata.notes.join("\n\n")}`,
                     onMouseLeave={handleMouseUp}
                     onTouchStart={handleMouseDown}
                     onTouchEnd={handleMouseUp}
-                    disabled={!podcastUrl || aiLoading}
+                    disabled={
+                      !podcastUrl || aiLoading || isRequestingPermission
+                    }
                     className={`relative ${aiActive ? "bg-red-500 hover:bg-red-600" : ""} w-24 h-24 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110 shadow-lg`}
                   >
                     {aiLoading ? (
+                      <div className="animate-spin h-12 w-12 border-4 border-current border-t-transparent rounded-full" />
+                    ) : isRequestingPermission ? (
                       <div className="animate-spin h-12 w-12 border-4 border-current border-t-transparent rounded-full" />
                     ) : (
                       <div className="flex flex-col items-center">
                         <Mic className="h-12 w-12" />
                         <span className="text-sm mt-2 font-medium">
-                          {aiActive ? "Release to stop" : "Hold to talk"}
+                          {aiActive
+                            ? "Release to stop"
+                            : hasMicPermission
+                              ? "Hold to talk"
+                              : "Tap for mic"}
                         </span>
                       </div>
                     )}

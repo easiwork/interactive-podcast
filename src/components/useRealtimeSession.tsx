@@ -7,6 +7,7 @@ export const useRealtimeSession = () => {
   const [dataChannel, setDataChannel] = useState<RTCDataChannel | null>(null);
   const peerConnection = useRef<RTCPeerConnection | null>(null);
   const audioElement = useRef<HTMLAudioElement | null>(null);
+  const microphoneStream = useRef<MediaStream | null>(null);
 
   async function startSession() {
     console.log("Starting session...");
@@ -38,6 +39,7 @@ export const useRealtimeSession = () => {
         video: false,
       });
       console.log("Got microphone access");
+      microphoneStream.current = ms;
       pc.addTrack(ms.getTracks()[0]);
     } catch (error) {
       console.log("No microphone available, using dummy audio track");
@@ -137,6 +139,17 @@ export const useRealtimeSession = () => {
   // Stop current session, clean up peer connection and data channel
   function stopSession() {
     console.log("Stopping session...");
+
+    // Stop microphone stream first
+    if (microphoneStream.current) {
+      console.log("Stopping microphone stream");
+      microphoneStream.current.getTracks().forEach((track) => {
+        track.stop();
+        console.log("Stopped microphone track:", track.label);
+      });
+      microphoneStream.current = null;
+    }
+
     if (dataChannel) {
       console.log("Closing data channel");
       dataChannel.close();
