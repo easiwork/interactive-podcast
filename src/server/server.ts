@@ -444,7 +444,7 @@ app.use((_, res) => {
 });
 
 // Global error handler for unhandled errors
-app.use((err: any, req: any, res: any, next: any) => {
+app.use((err: any, req: any, res: any) => {
   console.error(`[${new Date().toISOString()}] Unhandled error:`, err.message);
 
   // Handle Range Not Satisfiable errors globally
