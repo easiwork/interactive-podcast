@@ -240,15 +240,16 @@ router.get("/reload", async (req, res) => {
 // Endpoint for generating a full podcast
 router.post("/generate-podcast", async (req, res) => {
   try {
-    const { rssFeedUrl, storyCount } = req.body as {
+    const { rssFeedUrl, storyCount, force } = req.body as {
       rssFeedUrl?: string;
       storyCount?: number;
+      force?: boolean;
     };
 
     let result;
     if (rssFeedUrl) {
       // Generate podcast from RSS feed
-      result = await generateFullPodcast(rssFeedUrl);
+      result = await generateFullPodcast(rssFeedUrl, force || false);
     } else {
       // Generate podcast from Hacker News
       const stories = await fetchTopHNStories(storyCount || 5);

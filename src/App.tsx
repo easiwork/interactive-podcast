@@ -58,24 +58,27 @@ interface PodcastMetadata {
   script: string;
   audioFile: string;
   notes: string[];
-  stories: Story[];
-  failed?: boolean;
-  failureReason?: string;
+  stories: string[];
   isDirectPlayback?: boolean;
   directPlaybackInfo?: {
     title: string;
     audioUrl: string;
-    pubDate?: string;
-    description?: string;
-    imageUrl?: string;
-    faviconUrl?: string;
+    pubDate: string;
+    description: string;
+    imageUrl: string;
+    faviconUrl: string;
     feedInfo?: {
-      title?: string;
-      imageUrl?: string;
-      link?: string;
-      itunes?: { image?: string };
+      title: string;
+      imageUrl: string;
+      link: string;
+      itunes?: any;
     };
   };
+  needsGeneration?: boolean;
+  source?: Source;
+  error?: string;
+  failed?: boolean;
+  failureReason?: string;
   feedItems?: Array<{
     title: string;
     imageUrl?: string;
@@ -220,8 +223,9 @@ export default function App() {
   }
 
   const processFeed = async (source: Source) => {
+    console.log("=== processFeed called ===");
+    console.log("Processing feed:", source.url);
     try {
-      console.log("Processing feed:", source.url);
       const response = await fetch(`${API_BASE_URL}/generate-podcast`, {
         method: "POST",
         headers: {
@@ -233,21 +237,27 @@ export default function App() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to generate podcast");
+        throw new Error("Failed to process feed");
       }
 
       const data = await response.json();
-      console.log("Feed processed:", data);
+      console.log("Feed processed response:", data);
 
-      setProcessedFeeds((prev) => ({
-        ...prev,
-        [source.id]: data,
-      }));
+      // Only update state if we have valid data
+      if (data.isDirectPlayback || data.audioFile) {
+        console.log("Updating processedFeeds with valid data");
+        setProcessedFeeds((prev) => {
+          console.log("Previous processedFeeds state:", prev);
+          const newState = {
+            ...prev,
+            [source.id]: data as PodcastMetadata,
+          };
+          console.log("New processedFeeds state:", newState);
+          return newState;
+        });
 
-      // If this is the currently selected source, update the UI
-      if (source.id === selectedSource.id) {
         if (data.isDirectPlayback && data.directPlaybackInfo) {
-          console.log("Updating UI with direct playback data");
+          console.log("Setting up direct playback from processFeed");
           setIsPodcastFeed(true);
           setPodcastUrl(data.directPlaybackInfo.audioUrl);
 
@@ -282,58 +292,178 @@ export default function App() {
             directPlaybackInfo,
           });
         } else {
-          console.log("Updating UI with regular playback data");
+          console.log("Setting up regular playback from processFeed");
           setIsPodcastFeed(false);
 
-          // Handle failed podcasts
           if (data.failed) {
-            console.log("Podcast generation failed:", data.failureReason);
-            setPodcastUrl(data.audioFile); // This should be "/podcast_fail.m4a"
+            console.log(
+              "Podcast generation failed in processFeed:",
+              data.failureReason
+            );
+            setPodcastUrl(data.audioFile);
             setError(
               `Podcast generation failed: ${data.failureReason || "Unknown error"}`
             );
           } else {
+            console.log(
+              "Setting podcast URL from processFeed:",
+              `${API_BASE_URL}${data.audioFile}`
+            );
             setPodcastUrl(`${API_BASE_URL}${data.audioFile}`);
           }
-
           setPodcastMetadata(data);
         }
+      } else {
+        console.log("No valid data in response, marking as needs generation");
+        setProcessedFeeds((prev) => ({
+          ...prev,
+          [source.id]: {
+            script: "",
+            audioFile: "",
+            notes: [],
+            stories: [],
+            needsGeneration: true,
+            source: source,
+          } as PodcastMetadata,
+        }));
+        setError(
+          "Podcast needs to be generated. Use the debug controls to generate it."
+        );
       }
+    } catch (error) {
+      console.error("Failed to process feed:", error);
+      setError("Failed to process feed. Use the debug controls to retry.");
 
-      return data;
-    } catch (err) {
-      console.error(`Failed to process feed ${source.name}:`, err);
-      return null;
+      setProcessedFeeds((prev) => ({
+        ...prev,
+        [source.id]: {
+          script: "",
+          audioFile: "",
+          notes: [],
+          stories: [],
+          needsGeneration: true,
+          source: source,
+          error: error instanceof Error ? error.message : "Unknown error",
+        } as PodcastMetadata,
+      }));
     }
   };
 
-  // Process all feeds on initial load
-  // Manual reload function instead of automatic processing
-  const handleReload = async (forceRegenerate: boolean = false) => {
-    setIsGenerating(true);
+  // Add function to generate specific podcast
+  const handleGeneratePodcast = async (source: Source) => {
     try {
-      // Call the reload endpoint
-      const reloadResponse = await fetch(
-        `${API_BASE_URL}/reload?force=${forceRegenerate}`,
-        {
-          method: "GET",
-        }
-      );
+      setError(null);
+      const response = await fetch(`${API_BASE_URL}/reload?force=true`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
 
-      if (!reloadResponse.ok) {
-        throw new Error("Failed to trigger reload");
+      if (!response.ok) {
+        throw new Error("Failed to generate podcast");
       }
 
-      const reloadData = await reloadResponse.json();
-      console.log("Reload triggered:", reloadData);
-
-      // Then process feeds in parallel
-      await Promise.all(sources.map((source) => processFeed(source)));
+      // After successful generation, process the feed
+      await processFeed(source);
     } catch (error) {
-      console.error("Failed to reload feeds:", error);
-      setError("Failed to reload feeds. Please try again.");
-    } finally {
-      setIsGenerating(false);
+      console.error("Failed to generate podcast:", error);
+      setError("Failed to generate podcast. Please try again.");
+    }
+  };
+
+  // Add function to force generate specific podcast
+  const handleForceGeneratePodcast = async (source: Source) => {
+    try {
+      setError(null);
+      console.log("Force generating podcast for:", source.url);
+
+      // Call generate-podcast directly with force=true
+      const response = await fetch(`${API_BASE_URL}/generate-podcast`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          rssFeedUrl: source.url,
+          force: true,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to force generate podcast");
+      }
+
+      const data = await response.json();
+      console.log("Force generated podcast response:", data);
+
+      // Update processed feeds with new data
+      setProcessedFeeds((prev) => ({
+        ...prev,
+        [source.id]: data as PodcastMetadata,
+      }));
+
+      // Update UI with new data
+      if (data.isDirectPlayback && data.directPlaybackInfo) {
+        console.log("Setting up direct playback from force generate");
+        setIsPodcastFeed(true);
+        setPodcastUrl(data.directPlaybackInfo.audioUrl);
+
+        // Ensure all required fields are present
+        const directPlaybackInfo = {
+          title: data.directPlaybackInfo.title,
+          audioUrl: data.directPlaybackInfo.audioUrl,
+          pubDate:
+            data.directPlaybackInfo.pubDate || new Date().toLocaleString(),
+          description:
+            data.directPlaybackInfo.description || data.notes?.[0] || "",
+          imageUrl: data.directPlaybackInfo.imageUrl,
+          faviconUrl: data.directPlaybackInfo.faviconUrl,
+          feedInfo: data.directPlaybackInfo.feedInfo
+            ? {
+                title: data.directPlaybackInfo.feedInfo.title || source.name,
+                imageUrl: data.directPlaybackInfo.feedInfo.imageUrl,
+                link: data.directPlaybackInfo.feedInfo.link || source.url,
+                itunes: data.directPlaybackInfo.feedInfo.itunes,
+              }
+            : {
+                title: source.name,
+                imageUrl: data.directPlaybackInfo.imageUrl,
+                link: source.url,
+              },
+        };
+
+        setFeedTitle(directPlaybackInfo.feedInfo.title || source.name);
+        setPodcastMetadata({
+          ...data,
+          isDirectPlayback: true,
+          directPlaybackInfo,
+        });
+      } else {
+        console.log("Setting up regular playback from force generate");
+        setIsPodcastFeed(false);
+
+        if (data.failed) {
+          console.log(
+            "Podcast generation failed in force generate:",
+            data.failureReason
+          );
+          setPodcastUrl(data.audioFile);
+          setError(
+            `Podcast generation failed: ${data.failureReason || "Unknown error"}`
+          );
+        } else {
+          console.log(
+            "Setting podcast URL from force generate:",
+            `${API_BASE_URL}${data.audioFile}`
+          );
+          setPodcastUrl(`${API_BASE_URL}${data.audioFile}`);
+        }
+        setPodcastMetadata(data);
+      }
+    } catch (error) {
+      console.error("Failed to force generate podcast:", error);
+      setError("Failed to force generate podcast. Please try again.");
     }
   };
 
@@ -622,87 +752,101 @@ ${podcastMetadata.notes.join("\n\n")}`,
   };
 
   const handleSourceChange = (source: Source) => {
-    // Reset audio player state first
+    console.log("=== handleSourceChange called ===");
+    console.log("Selected source:", source);
+    console.log("Current processedFeeds state:", processedFeeds);
+    console.log("Current podcastUrl:", podcastUrl);
+    console.log("Current isPlaying:", isPlaying);
+    console.log("Current timestamp:", timestamp);
+    console.log("Current duration:", duration);
+
+    // Reset audio player state
     if (audioRef.current) {
+      console.log("Resetting audio player state");
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
       audioRef.current.src = "";
     }
+
+    // Reset UI state
+    console.log("Resetting UI state");
     setIsPlaying(false);
     setTimestamp(0);
     setDuration(0);
-
-    // Reset UI state
     setSelectedSource(source);
     setError(null);
     setExpandedDescription(false);
 
-    // Use the preprocessed data if available
-    const feedData = processedFeeds[source.id];
-    if (feedData) {
-      console.log("Loading feed data:", feedData);
-      if (feedData.isDirectPlayback && feedData.directPlaybackInfo) {
-        console.log(
-          "Setting direct playback data:",
-          feedData.directPlaybackInfo
-        );
+    // Check if we have processed data for this source
+    const processedData = processedFeeds[source.id];
+    console.log("Processed data for source:", processedData);
+
+    if (processedData) {
+      console.log("Found processed data, updating UI");
+      if (processedData.isDirectPlayback && processedData.directPlaybackInfo) {
+        console.log("Setting up direct playback");
         setIsPodcastFeed(true);
-        setPodcastUrl(feedData.directPlaybackInfo.audioUrl);
+        setPodcastUrl(processedData.directPlaybackInfo.audioUrl);
 
         // Ensure all required fields are present
         const directPlaybackInfo = {
-          title: feedData.directPlaybackInfo.title,
-          audioUrl: feedData.directPlaybackInfo.audioUrl,
+          title: processedData.directPlaybackInfo.title,
+          audioUrl: processedData.directPlaybackInfo.audioUrl,
           pubDate:
-            feedData.directPlaybackInfo.pubDate || new Date().toLocaleString(),
+            processedData.directPlaybackInfo.pubDate ||
+            new Date().toLocaleString(),
           description:
-            feedData.directPlaybackInfo.description ||
-            feedData.notes?.[0] ||
+            processedData.directPlaybackInfo.description ||
+            processedData.notes?.[0] ||
             "",
-          imageUrl: feedData.directPlaybackInfo.imageUrl,
-          faviconUrl: feedData.directPlaybackInfo.faviconUrl,
-          feedInfo: feedData.directPlaybackInfo.feedInfo
+          imageUrl: processedData.directPlaybackInfo.imageUrl,
+          faviconUrl: processedData.directPlaybackInfo.faviconUrl,
+          feedInfo: processedData.directPlaybackInfo.feedInfo
             ? {
                 title:
-                  feedData.directPlaybackInfo.feedInfo.title || source.name,
-                imageUrl: feedData.directPlaybackInfo.feedInfo.imageUrl,
-                link: feedData.directPlaybackInfo.feedInfo.link || source.url,
-                itunes: feedData.directPlaybackInfo.feedInfo.itunes,
+                  processedData.directPlaybackInfo.feedInfo.title ||
+                  source.name,
+                imageUrl: processedData.directPlaybackInfo.feedInfo.imageUrl,
+                link:
+                  processedData.directPlaybackInfo.feedInfo.link || source.url,
+                itunes: processedData.directPlaybackInfo.feedInfo.itunes,
               }
             : {
                 title: source.name,
-                imageUrl: feedData.directPlaybackInfo.imageUrl,
+                imageUrl: processedData.directPlaybackInfo.imageUrl,
                 link: source.url,
               },
         };
 
         setFeedTitle(directPlaybackInfo.feedInfo.title || source.name);
         setPodcastMetadata({
-          ...feedData,
+          ...processedData,
           isDirectPlayback: true,
           directPlaybackInfo,
         });
-        setExpandedDescription(false);
       } else {
-        console.log("Setting regular playback data");
+        console.log("Setting up regular playback");
         setIsPodcastFeed(false);
-
-        // Handle failed podcasts from cache
-        if (feedData.failed) {
-          console.log("Cached podcast failed:", feedData.failureReason);
-          setPodcastUrl(feedData.audioFile); // This should be "/podcast_fail.m4a"
+        if (processedData.failed) {
+          console.log(
+            "Podcast generation failed:",
+            processedData.failureReason
+          );
+          setPodcastUrl(processedData.audioFile);
           setError(
-            `Podcast generation failed: ${feedData.failureReason || "Unknown error"}`
+            `Podcast generation failed: ${processedData.failureReason || "Unknown error"}`
           );
         } else {
-          setPodcastUrl(`${API_BASE_URL}${feedData.audioFile}`);
+          console.log(
+            "Setting podcast URL:",
+            `${API_BASE_URL}${processedData.audioFile}`
+          );
+          setPodcastUrl(`${API_BASE_URL}${processedData.audioFile}`);
         }
-
-        setPodcastMetadata(feedData);
+        setPodcastMetadata(processedData);
       }
     } else {
-      console.log("No processed data, processing feed...");
-      // If feed hasn't been processed yet, process it now
+      console.log("No processed data found, processing feed");
       processFeed(source);
     }
   };
@@ -1044,51 +1188,99 @@ ${podcastMetadata.notes.join("\n\n")}`,
     setIsDragging(false);
   };
 
-  // Handle podcast URL changes
+  // Add logging to useEffect for podcastUrl changes
   useEffect(() => {
+    console.log("=== podcastUrl useEffect triggered ===");
+    console.log("New podcastUrl:", podcastUrl);
+    console.log("Current audioRef:", audioRef.current);
+
     if (audioRef.current && podcastUrl) {
       // Store current playback rate
       const currentRate = audioRef.current.playbackRate;
+      console.log("Current playback rate:", currentRate);
 
       // Reset audio player state
+      console.log("Resetting audio player state in useEffect");
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
-
-      // Set new source and load
       audioRef.current.src = podcastUrl;
       audioRef.current.load();
 
       // Restore playback rate
       audioRef.current.playbackRate = currentRate;
+      console.log("Restored playback rate:", currentRate);
 
       // Reset UI state
+      console.log("Resetting UI state in useEffect");
       setIsPlaying(false);
       setTimestamp(0);
       setDuration(0);
 
-      // Add event listeners for metadata and timeupdate
-      const handleMetadataLoaded = () => {
-        setDuration(audioRef.current?.duration || 0);
-      };
-
+      // Add event listeners
+      console.log("Adding audio event listeners");
       const handleTimeUpdate = () => {
-        setTimestamp(audioRef.current?.currentTime || 0);
+        if (audioRef.current) {
+          setTimestamp(audioRef.current.currentTime);
+        }
       };
 
-      audioRef.current.addEventListener("loadedmetadata", handleMetadataLoaded);
+      const handleDurationChange = () => {
+        if (audioRef.current) {
+          setDuration(audioRef.current.duration);
+        }
+      };
+
+      const handleEnded = () => {
+        setIsPlaying(false);
+        setTimestamp(0);
+      };
+
       audioRef.current.addEventListener("timeupdate", handleTimeUpdate);
+      audioRef.current.addEventListener("durationchange", handleDurationChange);
+      audioRef.current.addEventListener("ended", handleEnded);
 
       return () => {
+        console.log("Cleaning up audio event listeners");
         if (audioRef.current) {
-          audioRef.current.removeEventListener(
-            "loadedmetadata",
-            handleMetadataLoaded
-          );
           audioRef.current.removeEventListener("timeupdate", handleTimeUpdate);
+          audioRef.current.removeEventListener(
+            "durationchange",
+            handleDurationChange
+          );
+          audioRef.current.removeEventListener("ended", handleEnded);
         }
       };
     }
   }, [podcastUrl]);
+
+  // Process all feeds on initial load
+  const handleReload = async (forceRegenerate: boolean = false) => {
+    setIsGenerating(true);
+    try {
+      // Call the reload endpoint
+      const reloadResponse = await fetch(
+        `${API_BASE_URL}/reload?force=${forceRegenerate}`,
+        {
+          method: "GET",
+        }
+      );
+
+      if (!reloadResponse.ok) {
+        throw new Error("Failed to trigger reload");
+      }
+
+      const reloadData = await reloadResponse.json();
+      console.log("Reload triggered:", reloadData);
+
+      // Then process feeds in parallel
+      await Promise.all(sources.map((source) => processFeed(source)));
+    } catch (error) {
+      console.error("Failed to reload feeds:", error);
+      setError("Failed to reload feeds. Please try again.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   // --- MOBILE PLAYER FOOTER ---
   if (isMobile) {
@@ -1197,18 +1389,14 @@ ${podcastMetadata.notes.join("\n\n")}`,
               <div className="flex flex-col space-y-2">
                 <div className="flex space-x-2">
                   <Button
-                    onClick={() => handleReload(false)}
+                    onClick={() => handleGeneratePodcast(selectedSource)}
                     disabled={isGenerating}
                     className="flex-1"
-                    variant="outline"
                   >
-                    <RefreshCw
-                      className={`h-4 w-4 mr-2 ${isGenerating ? "animate-spin" : ""}`}
-                    />
-                    {isGenerating ? "Processing..." : "Reload Feeds"}
+                    {isGenerating ? "Processing..." : "Generate Podcast"}
                   </Button>
                   <Button
-                    onClick={() => handleReload(true)}
+                    onClick={() => handleForceGeneratePodcast(selectedSource)}
                     disabled={isGenerating}
                     variant="outline"
                     className="flex-shrink-0"
@@ -1881,25 +2069,21 @@ ${podcastMetadata.notes.join("\n\n")}`,
             <div className="flex flex-col space-y-4 mt-6">
               <div className="flex space-x-4 justify-center">
                 <Button
-                  onClick={() => handleReload(false)}
+                  onClick={() => handleGeneratePodcast(selectedSource)}
                   disabled={isGenerating}
                   variant="outline"
-                  className="min-w-[140px]"
                 >
-                  <RefreshCw
-                    className={`h-4 w-4 mr-2 ${isGenerating ? "animate-spin" : ""}`}
-                  />
-                  {isGenerating ? "Processing..." : "Reload Feeds"}
+                  {isGenerating ? "Processing..." : "Generate Podcast"}
                 </Button>
                 <Button
-                  onClick={() => handleReload(true)}
+                  onClick={() => handleForceGeneratePodcast(selectedSource)}
                   disabled={isGenerating}
                   variant="outline"
                 >
                   <RefreshCw
                     className={`h-4 w-4 mr-2 ${isGenerating ? "animate-spin" : ""}`}
                   />
-                  Force Reload
+                  Force Generate
                 </Button>
               </div>
 
