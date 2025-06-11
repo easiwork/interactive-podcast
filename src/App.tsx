@@ -79,6 +79,7 @@ interface PodcastMetadata {
   error?: string;
   failed?: boolean;
   failureReason?: string;
+  status?: "ready" | "processing" | "not_generated" | "error" | "failed";
   feedItems?: Array<{
     title: string;
     imageUrl?: string;
@@ -222,11 +223,11 @@ export default function App() {
     return source.url.replace(/[^a-zA-Z0-9]/g, "_");
   }
 
-  const processFeed = async (source: Source) => {
-    console.log("=== processFeed called ===");
-    console.log("Processing feed:", source.url);
+  // Rename processFeed to loadCachedFeed - only loads pre-generated content
+  const loadCachedFeed = async (source: Source) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/generate-podcast`, {
+      console.log("Loading cached feed:", source.url);
+      const response = await fetch(`${API_BASE_URL}/load-cached-podcast`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -237,179 +238,24 @@ export default function App() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to process feed");
+        throw new Error("Failed to load cached feed");
       }
 
       const data = await response.json();
-      console.log("Feed processed response:", data);
+      console.log("Cached feed loaded:", data);
 
-      // Only update state if we have valid data
-      if (data.isDirectPlayback || data.audioFile) {
-        console.log("Updating processedFeeds with valid data");
-        setProcessedFeeds((prev) => {
-          console.log("Previous processedFeeds state:", prev);
-          const newState = {
-            ...prev,
-            [source.id]: data as PodcastMetadata,
-          };
-          console.log("New processedFeeds state:", newState);
-          return newState;
-        });
-
-        if (data.isDirectPlayback && data.directPlaybackInfo) {
-          console.log("Setting up direct playback from processFeed");
-          setIsPodcastFeed(true);
-          setPodcastUrl(data.directPlaybackInfo.audioUrl);
-
-          // Ensure all required fields are present
-          const directPlaybackInfo = {
-            title: data.directPlaybackInfo.title,
-            audioUrl: data.directPlaybackInfo.audioUrl,
-            pubDate:
-              data.directPlaybackInfo.pubDate || new Date().toLocaleString(),
-            description:
-              data.directPlaybackInfo.description || data.notes?.[0] || "",
-            imageUrl: data.directPlaybackInfo.imageUrl,
-            faviconUrl: data.directPlaybackInfo.faviconUrl,
-            feedInfo: data.directPlaybackInfo.feedInfo
-              ? {
-                  title: data.directPlaybackInfo.feedInfo.title || source.name,
-                  imageUrl: data.directPlaybackInfo.feedInfo.imageUrl,
-                  link: data.directPlaybackInfo.feedInfo.link || source.url,
-                  itunes: data.directPlaybackInfo.feedInfo.itunes,
-                }
-              : {
-                  title: source.name,
-                  imageUrl: data.directPlaybackInfo.imageUrl,
-                  link: source.url,
-                },
-          };
-
-          setFeedTitle(directPlaybackInfo.feedInfo.title || source.name);
-          setPodcastMetadata({
-            ...data,
-            isDirectPlayback: true,
-            directPlaybackInfo,
-          });
-        } else {
-          console.log("Setting up regular playback from processFeed");
-          setIsPodcastFeed(false);
-
-          if (data.failed) {
-            console.log(
-              "Podcast generation failed in processFeed:",
-              data.failureReason
-            );
-            setPodcastUrl(data.audioFile);
-            setError(
-              `Podcast generation failed: ${data.failureReason || "Unknown error"}`
-            );
-          } else {
-            console.log(
-              "Setting podcast URL from processFeed:",
-              `${API_BASE_URL}${data.audioFile}`
-            );
-            setPodcastUrl(`${API_BASE_URL}${data.audioFile}`);
-          }
-          setPodcastMetadata(data);
-        }
-      } else {
-        console.log("No valid data in response, marking as needs generation");
-        setProcessedFeeds((prev) => ({
-          ...prev,
-          [source.id]: {
-            script: "",
-            audioFile: "",
-            notes: [],
-            stories: [],
-            needsGeneration: true,
-            source: source,
-          } as PodcastMetadata,
-        }));
-        setError(
-          "Podcast needs to be generated. Use the debug controls to generate it."
-        );
-      }
-    } catch (error) {
-      console.error("Failed to process feed:", error);
-      setError("Failed to process feed. Use the debug controls to retry.");
-
-      setProcessedFeeds((prev) => ({
-        ...prev,
-        [source.id]: {
-          script: "",
-          audioFile: "",
-          notes: [],
-          stories: [],
-          needsGeneration: true,
-          source: source,
-          error: error instanceof Error ? error.message : "Unknown error",
-        } as PodcastMetadata,
-      }));
-    }
-  };
-
-  // Add function to generate specific podcast
-  const handleGeneratePodcast = async (source: Source) => {
-    try {
-      setError(null);
-      const response = await fetch(`${API_BASE_URL}/reload?force=true`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to generate podcast");
-      }
-
-      // After successful generation, process the feed
-      await processFeed(source);
-    } catch (error) {
-      console.error("Failed to generate podcast:", error);
-      setError("Failed to generate podcast. Please try again.");
-    }
-  };
-
-  // Add function to force generate specific podcast
-  const handleForceGeneratePodcast = async (source: Source) => {
-    try {
-      setError(null);
-      console.log("Force generating podcast for:", source.url);
-
-      // Call generate-podcast directly with force=true
-      const response = await fetch(`${API_BASE_URL}/generate-podcast`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          rssFeedUrl: source.url,
-          force: true,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to force generate podcast");
-      }
-
-      const data = await response.json();
-      console.log("Force generated podcast response:", data);
-
-      // Update processed feeds with new data
+      // Update state with cached data
       setProcessedFeeds((prev) => ({
         ...prev,
         [source.id]: data as PodcastMetadata,
       }));
 
-      // Update UI with new data
+      // Update UI based on cached data
       if (data.isDirectPlayback && data.directPlaybackInfo) {
-        console.log("Setting up direct playback from force generate");
+        console.log("Setting up direct playback from cache");
         setIsPodcastFeed(true);
         setPodcastUrl(data.directPlaybackInfo.audioUrl);
 
-        // Ensure all required fields are present
         const directPlaybackInfo = {
           title: data.directPlaybackInfo.title,
           audioUrl: data.directPlaybackInfo.audioUrl,
@@ -439,33 +285,211 @@ export default function App() {
           isDirectPlayback: true,
           directPlaybackInfo,
         });
-      } else {
-        console.log("Setting up regular playback from force generate");
+      } else if (data.status === "processing") {
+        console.log("Feed is still being processed");
+        setError(
+          "This podcast is still being generated. Please check back in a few minutes."
+        );
+        setProcessedFeeds((prev) => ({
+          ...prev,
+          [source.id]: {
+            script: "",
+            audioFile: "",
+            notes: [],
+            stories: [],
+            needsGeneration: false,
+            status: "processing",
+            source: source,
+          } as PodcastMetadata,
+        }));
+      } else if (data.status === "not_generated") {
+        console.log("Feed has not been generated today");
+        setError("This podcast hasn't been generated for today yet.");
+        setProcessedFeeds((prev) => ({
+          ...prev,
+          [source.id]: {
+            script: "",
+            audioFile: "",
+            notes: [],
+            stories: [],
+            needsGeneration: true,
+            status: "not_generated",
+            source: source,
+          } as PodcastMetadata,
+        }));
+      } else if (data.failed) {
+        console.log("Cached feed shows generation failed:", data.failureReason);
         setIsPodcastFeed(false);
-
-        if (data.failed) {
-          console.log(
-            "Podcast generation failed in force generate:",
-            data.failureReason
-          );
-          setPodcastUrl(data.audioFile);
-          setError(
-            `Podcast generation failed: ${data.failureReason || "Unknown error"}`
-          );
-        } else {
-          console.log(
-            "Setting podcast URL from force generate:",
-            `${API_BASE_URL}${data.audioFile}`
-          );
-          setPodcastUrl(`${API_BASE_URL}${data.audioFile}`);
-        }
+        setPodcastUrl(data.audioFile);
+        setError(
+          `Podcast generation failed: ${data.failureReason || "Unknown error"}`
+        );
+        setPodcastMetadata(data);
+      } else {
+        console.log("Setting up regular playback from cache");
+        setIsPodcastFeed(false);
+        setPodcastUrl(`${API_BASE_URL}${data.audioFile}`);
         setPodcastMetadata(data);
       }
     } catch (error) {
-      console.error("Failed to force generate podcast:", error);
-      setError("Failed to force generate podcast. Please try again.");
+      console.error("Failed to load cached feed:", error);
+      setError("Failed to load podcast. It may not have been generated yet.");
+
+      setProcessedFeeds((prev) => ({
+        ...prev,
+        [source.id]: {
+          script: "",
+          audioFile: "",
+          notes: [],
+          stories: [],
+          needsGeneration: true,
+          status: "error",
+          source: source,
+          error: error instanceof Error ? error.message : "Unknown error",
+        } as PodcastMetadata,
+      }));
     }
   };
+
+  // Function to trigger background processing of all feeds
+  const handleProcessAllFeeds = async () => {
+    try {
+      setIsGenerating(true);
+      setError(null);
+      console.log("Triggering background processing of all feeds");
+
+      const response = await fetch(`${API_BASE_URL}/process-all-feeds`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to trigger background processing");
+      }
+
+      const data = await response.json();
+      console.log("Background processing triggered:", data);
+
+      // Optionally reload all feeds after a delay
+      setTimeout(() => {
+        sources.forEach((source) => loadCachedFeed(source));
+      }, 2000);
+    } catch (error) {
+      console.error("Failed to trigger background processing:", error);
+      setError("Failed to trigger background processing. Please try again.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // Update handleSourceChange to use loadCachedFeed
+  const handleSourceChange = (source: Source) => {
+    console.log("=== handleSourceChange called ===");
+    console.log("Selected source:", source);
+    console.log("Current processedFeeds state:", processedFeeds);
+
+    // Reset audio player state
+    if (audioRef.current) {
+      console.log("Resetting audio player state");
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current.src = "";
+    }
+
+    // Reset UI state
+    console.log("Resetting UI state");
+    setIsPlaying(false);
+    setTimestamp(0);
+    setDuration(0);
+    setSelectedSource(source);
+    setError(null);
+    setExpandedDescription(false);
+
+    // Check if we have cached data for this source
+    const cachedData = processedFeeds[source.id];
+    console.log("Cached data for source:", cachedData);
+
+    if (cachedData && cachedData.status !== "error") {
+      console.log("Found cached data, updating UI");
+      // Use cached data without making API call
+      if (cachedData.isDirectPlayback && cachedData.directPlaybackInfo) {
+        console.log("Setting up direct playback from cached data");
+        setIsPodcastFeed(true);
+        setPodcastUrl(cachedData.directPlaybackInfo.audioUrl);
+
+        const directPlaybackInfo = {
+          title: cachedData.directPlaybackInfo.title,
+          audioUrl: cachedData.directPlaybackInfo.audioUrl,
+          pubDate:
+            cachedData.directPlaybackInfo.pubDate ||
+            new Date().toLocaleString(),
+          description:
+            cachedData.directPlaybackInfo.description ||
+            cachedData.notes?.[0] ||
+            "",
+          imageUrl: cachedData.directPlaybackInfo.imageUrl,
+          faviconUrl: cachedData.directPlaybackInfo.faviconUrl,
+          feedInfo: cachedData.directPlaybackInfo.feedInfo
+            ? {
+                title:
+                  cachedData.directPlaybackInfo.feedInfo.title || source.name,
+                imageUrl: cachedData.directPlaybackInfo.feedInfo.imageUrl,
+                link: cachedData.directPlaybackInfo.feedInfo.link || source.url,
+                itunes: cachedData.directPlaybackInfo.feedInfo.itunes,
+              }
+            : {
+                title: source.name,
+                imageUrl: cachedData.directPlaybackInfo.imageUrl,
+                link: source.url,
+              },
+        };
+
+        setFeedTitle(directPlaybackInfo.feedInfo.title || source.name);
+        setPodcastMetadata({
+          ...cachedData,
+          isDirectPlayback: true,
+          directPlaybackInfo,
+        });
+      } else if (cachedData.status === "processing") {
+        setError(
+          "This podcast is still being generated. Please check back in a few minutes."
+        );
+      } else if (
+        cachedData.status === "not_generated" ||
+        cachedData.needsGeneration
+      ) {
+        setError(
+          "This podcast hasn't been generated for today yet. Use debug controls to generate it."
+        );
+      } else if (cachedData.failed) {
+        console.log(
+          "Cached data shows generation failed:",
+          cachedData.failureReason
+        );
+        setIsPodcastFeed(false);
+        setPodcastUrl(cachedData.audioFile);
+        setError(
+          `Podcast generation failed: ${cachedData.failureReason || "Unknown error"}`
+        );
+        setPodcastMetadata(cachedData);
+      } else {
+        console.log("Setting up regular playback from cached data");
+        setIsPodcastFeed(false);
+        setPodcastUrl(`${API_BASE_URL}${cachedData.audioFile}`);
+        setPodcastMetadata(cachedData);
+      }
+    } else {
+      console.log("No cached data found, loading from server");
+      loadCachedFeed(source);
+    }
+  };
+
+  // Load all feeds on initial load
+  useEffect(() => {
+    sources.forEach((source) => loadCachedFeed(source));
+  }, []);
 
   useEffect(() => {
     // Initialize audio element
@@ -748,106 +772,6 @@ ${podcastMetadata.notes.join("\n\n")}`,
     setPlaybackSpeed(speed);
     if (audioRef.current) {
       audioRef.current.playbackRate = speed;
-    }
-  };
-
-  const handleSourceChange = (source: Source) => {
-    console.log("=== handleSourceChange called ===");
-    console.log("Selected source:", source);
-    console.log("Current processedFeeds state:", processedFeeds);
-    console.log("Current podcastUrl:", podcastUrl);
-    console.log("Current isPlaying:", isPlaying);
-    console.log("Current timestamp:", timestamp);
-    console.log("Current duration:", duration);
-
-    // Reset audio player state
-    if (audioRef.current) {
-      console.log("Resetting audio player state");
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-      audioRef.current.src = "";
-    }
-
-    // Reset UI state
-    console.log("Resetting UI state");
-    setIsPlaying(false);
-    setTimestamp(0);
-    setDuration(0);
-    setSelectedSource(source);
-    setError(null);
-    setExpandedDescription(false);
-
-    // Check if we have processed data for this source
-    const processedData = processedFeeds[source.id];
-    console.log("Processed data for source:", processedData);
-
-    if (processedData) {
-      console.log("Found processed data, updating UI");
-      if (processedData.isDirectPlayback && processedData.directPlaybackInfo) {
-        console.log("Setting up direct playback");
-        setIsPodcastFeed(true);
-        setPodcastUrl(processedData.directPlaybackInfo.audioUrl);
-
-        // Ensure all required fields are present
-        const directPlaybackInfo = {
-          title: processedData.directPlaybackInfo.title,
-          audioUrl: processedData.directPlaybackInfo.audioUrl,
-          pubDate:
-            processedData.directPlaybackInfo.pubDate ||
-            new Date().toLocaleString(),
-          description:
-            processedData.directPlaybackInfo.description ||
-            processedData.notes?.[0] ||
-            "",
-          imageUrl: processedData.directPlaybackInfo.imageUrl,
-          faviconUrl: processedData.directPlaybackInfo.faviconUrl,
-          feedInfo: processedData.directPlaybackInfo.feedInfo
-            ? {
-                title:
-                  processedData.directPlaybackInfo.feedInfo.title ||
-                  source.name,
-                imageUrl: processedData.directPlaybackInfo.feedInfo.imageUrl,
-                link:
-                  processedData.directPlaybackInfo.feedInfo.link || source.url,
-                itunes: processedData.directPlaybackInfo.feedInfo.itunes,
-              }
-            : {
-                title: source.name,
-                imageUrl: processedData.directPlaybackInfo.imageUrl,
-                link: source.url,
-              },
-        };
-
-        setFeedTitle(directPlaybackInfo.feedInfo.title || source.name);
-        setPodcastMetadata({
-          ...processedData,
-          isDirectPlayback: true,
-          directPlaybackInfo,
-        });
-      } else {
-        console.log("Setting up regular playback");
-        setIsPodcastFeed(false);
-        if (processedData.failed) {
-          console.log(
-            "Podcast generation failed:",
-            processedData.failureReason
-          );
-          setPodcastUrl(processedData.audioFile);
-          setError(
-            `Podcast generation failed: ${processedData.failureReason || "Unknown error"}`
-          );
-        } else {
-          console.log(
-            "Setting podcast URL:",
-            `${API_BASE_URL}${processedData.audioFile}`
-          );
-          setPodcastUrl(`${API_BASE_URL}${processedData.audioFile}`);
-        }
-        setPodcastMetadata(processedData);
-      }
-    } else {
-      console.log("No processed data found, processing feed");
-      processFeed(source);
     }
   };
 
@@ -1253,27 +1177,72 @@ ${podcastMetadata.notes.join("\n\n")}`,
     }
   }, [podcastUrl]);
 
-  // Process all feeds on initial load
+  // Keep individual generation for debug mode
+  const handleGeneratePodcast = async (source: Source) => {
+    try {
+      setError(null);
+      const response = await fetch(`${API_BASE_URL}/generate-podcast`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          rssFeedUrl: source.url,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate podcast");
+      }
+
+      // After successful generation, reload the cached feed
+      await loadCachedFeed(source);
+    } catch (error) {
+      console.error("Failed to generate podcast:", error);
+      setError("Failed to generate podcast. Please try again.");
+    }
+  };
+
+  // Keep force generation for debug mode
+  const handleForceGeneratePodcast = async (source: Source) => {
+    try {
+      setError(null);
+      console.log("Force generating podcast for:", source.url);
+
+      const response = await fetch(`${API_BASE_URL}/generate-podcast`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          rssFeedUrl: source.url,
+          force: true,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to force generate podcast");
+      }
+
+      // After successful generation, reload the cached feed
+      await loadCachedFeed(source);
+    } catch (error) {
+      console.error("Failed to force generate podcast:", error);
+      setError("Failed to force generate podcast. Please try again.");
+    }
+  };
+
+  // Process all feeds on initial load or manual reload
   const handleReload = async (forceRegenerate: boolean = false) => {
     setIsGenerating(true);
     try {
-      // Call the reload endpoint
-      const reloadResponse = await fetch(
-        `${API_BASE_URL}/reload?force=${forceRegenerate}`,
-        {
-          method: "GET",
-        }
-      );
-
-      if (!reloadResponse.ok) {
-        throw new Error("Failed to trigger reload");
+      if (forceRegenerate) {
+        // Trigger background processing for all feeds
+        await handleProcessAllFeeds();
+      } else {
+        // Just reload cached data
+        await Promise.all(sources.map((source) => loadCachedFeed(source)));
       }
-
-      const reloadData = await reloadResponse.json();
-      console.log("Reload triggered:", reloadData);
-
-      // Then process feeds in parallel
-      await Promise.all(sources.map((source) => processFeed(source)));
     } catch (error) {
       console.error("Failed to reload feeds:", error);
       setError("Failed to reload feeds. Please try again.");
@@ -1389,11 +1358,19 @@ ${podcastMetadata.notes.join("\n\n")}`,
               <div className="flex flex-col space-y-2">
                 <div className="flex space-x-2">
                   <Button
-                    onClick={() => handleGeneratePodcast(selectedSource)}
+                    onClick={() => handleProcessAllFeeds()}
                     disabled={isGenerating}
                     className="flex-1"
                   >
-                    {isGenerating ? "Processing..." : "Generate Podcast"}
+                    {isGenerating ? "Processing..." : "Process All Feeds"}
+                  </Button>
+                  <Button
+                    onClick={() => handleGeneratePodcast(selectedSource)}
+                    disabled={isGenerating}
+                    variant="outline"
+                    className="flex-shrink-0"
+                  >
+                    Generate
                   </Button>
                   <Button
                     onClick={() => handleForceGeneratePodcast(selectedSource)}
@@ -2069,11 +2046,18 @@ ${podcastMetadata.notes.join("\n\n")}`,
             <div className="flex flex-col space-y-4 mt-6">
               <div className="flex space-x-4 justify-center">
                 <Button
+                  onClick={() => handleProcessAllFeeds()}
+                  disabled={isGenerating}
+                  variant="outline"
+                >
+                  {isGenerating ? "Processing..." : "Process All Feeds"}
+                </Button>
+                <Button
                   onClick={() => handleGeneratePodcast(selectedSource)}
                   disabled={isGenerating}
                   variant="outline"
                 >
-                  {isGenerating ? "Processing..." : "Generate Podcast"}
+                  Generate
                 </Button>
                 <Button
                   onClick={() => handleForceGeneratePodcast(selectedSource)}

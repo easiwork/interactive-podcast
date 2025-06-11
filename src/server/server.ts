@@ -13,6 +13,7 @@ import {
 } from "./podcast-generator";
 import { fetchTopHNStories } from "./hacker-news";
 import fetch from "node-fetch";
+import { defaultSources, Source } from "../components/SourceSelector";
 
 // Get the podcast storage directory from environment variable or use default
 const PODCASTS_DIR =
@@ -430,6 +431,135 @@ router.get("/proxy-image", async (req, res) => {
     console.error("Error proxying image:", error);
     res.status(500).json({ error: "Failed to fetch image" });
   }
+});
+
+// Endpoint for loading cached podcast data only
+router.post("/load-cached-podcast", async (req, res) => {
+  try {
+    const { rssFeedUrl } = req.body as {
+      rssFeedUrl: string;
+    };
+
+    if (!rssFeedUrl) {
+      res.status(400).json({ error: "RSS feed URL is required" });
+      return;
+    }
+
+    // Check if cached podcast exists for today
+    const feedId = rssFeedUrl.replace(/[^a-zA-Z0-9]/g, "_");
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
+    const feedSpecificDir = path.join(PODCASTS_DIR, feedId, today);
+    const metadataPath = path.join(feedSpecificDir, "metadata.json");
+    const directPlaybackPath = path.join(
+      feedSpecificDir,
+      "direct_playback.json"
+    );
+
+    // Check for direct playback info first
+    if (fs.existsSync(directPlaybackPath)) {
+      const directPlaybackData = JSON.parse(
+        fs.readFileSync(directPlaybackPath, "utf-8")
+      );
+      res.json({
+        script: `Direct podcast playback: ${directPlaybackData.title}`,
+        audioFile: directPlaybackData.audioUrl,
+        notes: [directPlaybackData.description || "No description available"],
+        feedItems: directPlaybackData.feedItems || [],
+        isDirectPlayback: true,
+        directPlaybackInfo: directPlaybackData,
+        status: "ready",
+      });
+      return;
+    }
+
+    // Check for generated podcast metadata
+    if (fs.existsSync(metadataPath)) {
+      const cachedData = JSON.parse(fs.readFileSync(metadataPath, "utf-8"));
+
+      // Convert file system path to web-accessible URL if needed
+      if (
+        cachedData.audioFile &&
+        !cachedData.audioFile.startsWith("http") &&
+        !cachedData.audioFile.startsWith("/")
+      ) {
+        const relativePath = path.relative(process.cwd(), cachedData.audioFile);
+        cachedData.audioFile = `/${relativePath.replace(/\\/g, "/")}`;
+      }
+
+      res.json({
+        ...cachedData,
+        status: cachedData.failed ? "failed" : "ready",
+      });
+      return;
+    }
+
+    // No cached data found
+    res.json({
+      status: "not_generated",
+      script: "",
+      audioFile: "",
+      notes: [],
+      feedItems: [],
+    });
+  } catch (error) {
+    console.error("Failed to load cached podcast:", error);
+    res.status(500).json({
+      error: "Failed to load cached podcast",
+      status: "error",
+    });
+  }
+});
+
+// Endpoint for triggering background processing of all feeds
+router.post("/process-all-feeds", async (req, res) => {
+  try {
+    console.log("Triggering background processing of all feeds");
+
+    // Use defaultSources as the source of truth
+    const feedUrls = defaultSources.map((source: Source) => source.url);
+
+    // Trigger processing for each feed in the background
+    // Note: In production, you'd want to use a proper job queue
+    const processingPromises = feedUrls.map(async (feedUrl: string) => {
+      try {
+        console.log(`Processing feed: ${feedUrl}`);
+        await generateFullPodcast(feedUrl, false); // Don't force regenerate unless specifically requested
+        console.log(`Completed processing: ${feedUrl}`);
+        return { feedUrl, status: "success" };
+      } catch (error) {
+        console.error(`Failed to process feed ${feedUrl}:`, error);
+        return {
+          feedUrl,
+          status: "error",
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    });
+
+    // Don't wait for all to complete - return immediately
+    res.json({
+      message: "Background processing started",
+      feedCount: feedUrls.length,
+      status: "processing",
+    });
+
+    // Process in background
+    Promise.all(processingPromises)
+      .then((results) => {
+        console.log("Background processing completed:", results);
+      })
+      .catch((error) => {
+        console.error("Background processing error:", error);
+      });
+  } catch (error) {
+    console.error("Failed to start background processing:", error);
+    res.status(500).json({ error: "Failed to start background processing" });
+  }
+});
+
+// Add health check endpoint
+router.get("/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
 if (process.env.NODE_ENV !== "development") {
