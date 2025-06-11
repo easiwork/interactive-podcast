@@ -511,7 +511,7 @@ router.post("/load-cached-podcast", async (req, res) => {
 });
 
 // Endpoint for triggering background processing of all feeds
-router.post("/process-all-feeds", async (req, res) => {
+router.post("/process-all-feeds", async (_req, res) => {
   try {
     console.log("Triggering background processing of all feeds");
 
@@ -558,7 +558,7 @@ router.post("/process-all-feeds", async (req, res) => {
 });
 
 // Add health check endpoint
-router.get("/health", (req, res) => {
+router.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
