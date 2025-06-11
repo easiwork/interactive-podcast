@@ -196,6 +196,7 @@ export default function App() {
   const [isRequestingPermission, setIsRequestingPermission] = useState(false);
   const [isButtonHeld, setIsButtonHeld] = useState(false);
   const isButtonHeldRef = useRef(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   // Check if debug mode is enabled via query parameter
   const isDebugMode = () => {
@@ -1251,6 +1252,31 @@ ${podcastMetadata.notes.join("\n\n")}`,
     }
   };
 
+  const handleMobileSourceSelect = (source: Source) => {
+    // Use the full handleSourceChange logic to properly load the source
+    handleSourceChange(source);
+    // Then open the mobile player
+    setMobilePlayerOpen(true);
+  };
+
+  // Handle Escape key to close modals
+  useEffect(() => {
+    const handleEscapeKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (showDetails) {
+          setShowDetails(false);
+        } else if (mobilePlayerOpen) {
+          setMobilePlayerOpen(false);
+        }
+      }
+    };
+
+    document.addEventListener("keydown", handleEscapeKey);
+    return () => {
+      document.removeEventListener("keydown", handleEscapeKey);
+    };
+  }, [showDetails, mobilePlayerOpen]);
+
   // --- MOBILE PLAYER FOOTER ---
   if (isMobile) {
     return (
@@ -1345,6 +1371,8 @@ ${podcastMetadata.notes.join("\n\n")}`,
               selectedSource={selectedSource}
               onSourceChange={handleSourceChange}
               onAddCustomSource={handleAddCustomSource}
+              isMobile={isMobile}
+              onMobileSourceSelect={handleMobileSourceSelect}
             />
 
             {error && (
@@ -1456,313 +1484,379 @@ ${podcastMetadata.notes.join("\n\n")}`,
         {/* Slide-up Player Modal */}
         {isVisible && (
           <div
-            ref={modalRef}
-            className={`fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl max-h-[90vh] overflow-y-auto transition-all duration-300 ease-out ${
-              isDragging ? "transition-none" : ""
-            } ${!isOpening ? "translate-y-0" : "translate-y-full"}`}
-            style={{
-              touchAction: "pan-y",
-              transform: `translateY(${isDragging ? modalHeight : 0}px)`,
-            }}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
+            className="fixed inset-0 z-40 bg-transparent transition-opacity duration-300"
+            onClick={handleClose}
           >
-            <div className="flex justify-center mb-4 sticky top-0 bg-white z-10">
-              <div
-                className="w-12 h-1.5 bg-gray-300 rounded-full cursor-pointer mt-3 touch-none active:bg-gray-400 transition-colors"
-                onTouchStart={handleHandleTouchStart}
-                onTouchMove={handleHandleTouchMove}
-                onTouchEnd={handleHandleTouchEnd}
-              />
-            </div>
+            <div
+              ref={modalRef}
+              className={`fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl max-h-[90vh] overflow-y-auto transition-all duration-300 ease-out ${
+                isDragging ? "transition-none" : ""
+              } ${!isOpening ? "translate-y-0" : "translate-y-full"}`}
+              style={{
+                touchAction: "pan-y",
+                transform: `translateY(${isDragging ? modalHeight : 0}px)`,
+              }}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-center mb-4 sticky top-0 bg-white z-10">
+                <div
+                  className="w-12 h-1.5 bg-gray-300 rounded-full cursor-pointer mt-3 touch-none active:bg-gray-400 transition-colors"
+                  onTouchStart={handleHandleTouchStart}
+                  onTouchMove={handleHandleTouchMove}
+                  onTouchEnd={handleHandleTouchEnd}
+                  onClick={handleClose}
+                />
+              </div>
 
-            {/* Podcast Header with Image and Info */}
-            <div className="px-4 pb-4">
-              <div className="flex flex-col items-center space-y-4">
-                {/* Large Image Section */}
-                <div className="w-full max-w-sm aspect-square">
-                  {(() => {
-                    const imgSrc = getArtworkSrc();
-                    return (
-                      <img
-                        src={imgSrc}
-                        alt={
-                          podcastMetadata?.directPlaybackInfo?.title ||
-                          "Podcast artwork"
-                        }
-                        className="w-full h-full rounded-2xl object-cover shadow-lg"
-                        onError={(e) => {
-                          const img = e.target as HTMLImageElement;
-                          img.style.display = "none";
-                        }}
-                      />
-                    );
-                  })()}
-                </div>
-
-                {/* Title and Info Section */}
-                <div className="text-center space-y-2">
-                  {/* Content Type Badge */}
-                  <div
-                    className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                      isPodcastFeed
-                        ? "bg-blue-100 text-blue-800 border border-blue-200"
-                        : "bg-purple-100 text-purple-800 border border-purple-200"
-                    }`}
-                  >
-                    <div
-                      className={`w-2 h-2 rounded-full mr-2 ${
-                        isPodcastFeed ? "bg-blue-500" : "bg-purple-500"
-                      }`}
-                    />
-                    {isPodcastFeed
-                      ? "🎧 Original Podcast"
-                      : `🤖 Personalized by ${hostNames.join(" and ")}`}
-                  </div>
-                  <h1 className="text-xl font-bold text-gray-900">
-                    {podcastMetadata?.directPlaybackInfo?.title ||
-                      podcastMetadata?.directPlaybackInfo?.feedInfo?.title ||
-                      selectedSource?.name ||
-                      "Podcast Player"}
-                  </h1>
-                  {isPodcastFeed &&
-                    podcastMetadata?.directPlaybackInfo?.feedInfo?.title && (
-                      <div className="text-base font-normal text-gray-600">
-                        {podcastMetadata.directPlaybackInfo.feedInfo.title}
-                      </div>
-                    )}
-                  {isPodcastFeed &&
-                    podcastMetadata?.directPlaybackInfo?.pubDate && (
-                      <div className="text-sm text-gray-500">
-                        Published:{" "}
-                        {new Date(
-                          podcastMetadata.directPlaybackInfo.pubDate
-                        ).toLocaleDateString()}
-                      </div>
-                    )}
-                </div>
-
-                {/* Description Section */}
-                {isPodcastFeed &&
-                  podcastMetadata?.directPlaybackInfo?.description && (
-                    <div className="w-full">
-                      <div
-                        ref={descriptionRef}
-                        className={`text-sm text-gray-600 prose prose-sm max-w-none text-center ${!expandedDescription ? "line-clamp-3" : ""}`}
-                        dangerouslySetInnerHTML={{
-                          __html: DOMPurify.sanitize(
-                            podcastMetadata.directPlaybackInfo.description
-                          ),
-                        }}
-                      />
-                      {isTruncated && (
-                        <button
-                          onClick={() =>
-                            setExpandedDescription(!expandedDescription)
+              {/* Podcast Header with Image and Info */}
+              <div className="px-4 pb-4">
+                <div className="flex flex-col items-center space-y-4">
+                  {/* Large Image Section */}
+                  <div className="w-full max-w-sm aspect-square">
+                    {(() => {
+                      const imgSrc = getArtworkSrc();
+                      return (
+                        <img
+                          src={imgSrc}
+                          alt={
+                            podcastMetadata?.directPlaybackInfo?.title ||
+                            "Podcast artwork"
                           }
-                          className="text-sm text-blue-600 hover:text-blue-800 mt-2 block mx-auto"
-                        >
-                          {expandedDescription ? "Show less" : "Read more"}
-                        </button>
-                      )}
-                    </div>
-                  )}
+                          className="w-full h-full rounded-2xl object-cover shadow-lg"
+                          onError={(e) => {
+                            const img = e.target as HTMLImageElement;
+                            img.style.display = "none";
+                          }}
+                        />
+                      );
+                    })()}
+                  </div>
 
-                {/* Podcast Status Badge */}
-                {podcastMetadata && (
-                  <div className="w-full">
+                  {/* Title and Info Section */}
+                  <div className="text-center space-y-2">
+                    {/* Content Type Badge */}
                     <div
-                      className={`p-3 rounded-lg border ${
-                        podcastMetadata.failed
-                          ? "bg-red-50 border-red-200"
-                          : isPodcastFeed
-                            ? "bg-blue-50 border-blue-200"
-                            : "bg-purple-50 border-purple-200"
+                      className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                        isPodcastFeed
+                          ? "bg-blue-100 text-blue-800 border border-blue-200"
+                          : "bg-purple-100 text-purple-800 border border-purple-200"
                       }`}
                     >
-                      <div className="flex items-center justify-center space-x-3">
-                        <p
-                          className={`text-sm text-center ${
-                            podcastMetadata.failed
-                              ? "text-red-800"
-                              : isPodcastFeed
-                                ? "text-blue-800"
-                                : "text-purple-800"
-                          }`}
-                        >
-                          {podcastMetadata.failed
-                            ? "❌ Podcast generation failed"
-                            : isPodcastFeed
-                              ? "🎧 Playing original podcast audio directly"
-                              : `🤖 Personalized podcast by ${hostNames.join(" and ")}`}
-                        </p>
-                      </div>
-                      {isPodcastFeed &&
-                        podcastMetadata?.directPlaybackInfo?.feedInfo?.link && (
-                          <a
-                            href={
-                              podcastMetadata.directPlaybackInfo.feedInfo.link
+                      <div
+                        className={`w-2 h-2 rounded-full mr-2 ${
+                          isPodcastFeed ? "bg-blue-500" : "bg-purple-500"
+                        }`}
+                      />
+                      {isPodcastFeed
+                        ? "🎧 Original Podcast"
+                        : `🤖 Personalized by ${hostNames.join(" and ")}`}
+                    </div>
+                    <h1 className="text-xl font-bold text-gray-900">
+                      {podcastMetadata?.directPlaybackInfo?.title ||
+                        podcastMetadata?.directPlaybackInfo?.feedInfo?.title ||
+                        selectedSource?.name ||
+                        "Podcast Player"}
+                    </h1>
+                    {isPodcastFeed &&
+                      podcastMetadata?.directPlaybackInfo?.feedInfo?.title && (
+                        <div className="text-base font-normal text-gray-600">
+                          {podcastMetadata.directPlaybackInfo.feedInfo.title}
+                        </div>
+                      )}
+                    {isPodcastFeed &&
+                      podcastMetadata?.directPlaybackInfo?.pubDate && (
+                        <div className="text-sm text-gray-500">
+                          Published:{" "}
+                          {new Date(
+                            podcastMetadata.directPlaybackInfo.pubDate
+                          ).toLocaleDateString()}
+                        </div>
+                      )}
+                  </div>
+
+                  {/* Description Section */}
+                  {isPodcastFeed &&
+                    podcastMetadata?.directPlaybackInfo?.description && (
+                      <div className="w-full">
+                        <div
+                          ref={descriptionRef}
+                          className={`text-sm text-gray-600 prose prose-sm max-w-none text-center ${!expandedDescription ? "line-clamp-3" : ""}`}
+                          dangerouslySetInnerHTML={{
+                            __html: DOMPurify.sanitize(
+                              podcastMetadata.directPlaybackInfo.description
+                            ),
+                          }}
+                        />
+                        {isTruncated && (
+                          <button
+                            onClick={() =>
+                              setExpandedDescription(!expandedDescription)
                             }
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-blue-600 hover:text-blue-800 mt-1 block text-center"
+                            className="text-sm text-blue-600 hover:text-blue-800 mt-2 block mx-auto"
                           >
-                            View original podcast →
-                          </a>
+                            {expandedDescription ? "Show less" : "Read more"}
+                          </button>
                         )}
-                      {!isPodcastFeed && selectedSource?.url && (
-                        <a
-                          href={selectedSource.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-purple-600 hover:text-purple-800 mt-1 block text-center"
-                        >
-                          View original feed →
-                        </a>
+                      </div>
+                    )}
+
+                  {/* Podcast Status Badge */}
+                  {podcastMetadata && (
+                    <div className="w-full">
+                      <div
+                        className={`p-3 rounded-lg border ${
+                          podcastMetadata.failed
+                            ? "bg-red-50 border-red-200"
+                            : isPodcastFeed
+                              ? "bg-blue-50 border-blue-200"
+                              : "bg-purple-50 border-purple-200"
+                        }`}
+                      >
+                        <div className="flex items-center justify-center space-x-3">
+                          <p
+                            className={`text-sm text-center ${
+                              podcastMetadata.failed
+                                ? "text-red-800"
+                                : isPodcastFeed
+                                  ? "text-blue-800"
+                                  : "text-purple-800"
+                            }`}
+                          >
+                            {podcastMetadata.failed
+                              ? "❌ Podcast generation failed"
+                              : isPodcastFeed
+                                ? "🎧 Playing original podcast audio directly"
+                                : `🤖 Personalized podcast by ${hostNames.join(" and ")}`}
+                          </p>
+                        </div>
+                        {isPodcastFeed &&
+                          podcastMetadata?.directPlaybackInfo?.feedInfo
+                            ?.link && (
+                            <a
+                              href={
+                                podcastMetadata.directPlaybackInfo.feedInfo.link
+                              }
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-600 hover:text-blue-800 mt-1 block text-center"
+                            >
+                              View original podcast →
+                            </a>
+                          )}
+                        {!isPodcastFeed && podcastMetadata && (
+                          <div className="text-center">
+                            <button
+                              onClick={() => setShowDetails(true)}
+                              className="text-xs text-purple-600 hover:text-purple-800 mt-1"
+                            >
+                              View details →
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Player Controls Section */}
+              <div className="px-4 pb-4">
+                <div className="space-y-4">
+                  {/* Progress Bar */}
+                  <div className="flex items-center space-x-4">
+                    <span className="text-sm text-gray-500">
+                      {formatTime(timestamp)}
+                    </span>
+                    <Slider
+                      value={[timestamp]}
+                      max={duration}
+                      step={1}
+                      onValueChange={(value) => handleSliderChange(value[0])}
+                      disabled={!podcastUrl}
+                    />
+                    <span className="text-sm text-gray-500">
+                      {formatTime(duration)}
+                    </span>
+                  </div>
+
+                  {/* Playback Controls */}
+                  <div className="flex items-center justify-center space-x-4">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={rewind}
+                      disabled={!podcastUrl}
+                      className="w-12 h-12"
+                    >
+                      <RotateCcw className="h-6 w-6" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={togglePlay}
+                      disabled={!podcastUrl}
+                      className="w-16 h-16"
+                    >
+                      {isPlaying ? (
+                        <Pause className="h-8 w-8" />
+                      ) : (
+                        <Play className="h-8 w-8" />
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={fastForward}
+                      disabled={!podcastUrl}
+                      className="w-12 h-12"
+                    >
+                      <RotateCw className="h-6 w-6" />
+                    </Button>
+                  </div>
+
+                  {/* Playback Speed Controls */}
+                  <div className="flex items-center justify-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSpeed(0.5)}
+                      disabled={!podcastUrl || playbackSpeed === 0.5}
+                    >
+                      0.5x
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSpeed(1)}
+                      disabled={!podcastUrl || playbackSpeed === 1}
+                    >
+                      1x
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSpeed(1.5)}
+                      disabled={!podcastUrl || playbackSpeed === 1.5}
+                    >
+                      1.5x
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSpeed(2)}
+                      disabled={!podcastUrl || playbackSpeed === 2}
+                    >
+                      2x
+                    </Button>
+                  </div>
+
+                  {/* AI Button */}
+                  <div className="flex justify-center">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onMouseDown={handleMouseDown}
+                      onMouseUp={handleMouseUp}
+                      onMouseLeave={handleMouseUp}
+                      onTouchStart={handleMouseDown}
+                      onTouchEnd={handleMouseUp}
+                      disabled={
+                        !podcastUrl || aiLoading || isRequestingPermission
+                      }
+                      className={`relative ${aiActive ? "bg-red-500 hover:bg-red-600" : ""} w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg`}
+                    >
+                      {aiLoading ? (
+                        <div className="animate-spin h-10 w-10 border-4 border-current border-t-transparent rounded-full" />
+                      ) : isRequestingPermission ? (
+                        <div className="animate-spin h-10 w-10 border-4 border-current border-t-transparent rounded-full" />
+                      ) : (
+                        <div className="flex flex-col items-center">
+                          <Mic className="h-10 w-10" />
+                          <span className="text-xs mt-1 font-medium">
+                            {aiActive
+                              ? "Release"
+                              : hasMicPermission
+                                ? "Hold to talk"
+                                : "Tap for mic"}
+                          </span>
+                        </div>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Close Button */}
+              <div className="px-4 pb-4">
+                <Button
+                  className="w-full"
+                  variant="secondary"
+                  onClick={handleClose}
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Details Modal */}
+        {showDetails && podcastMetadata && (
+          <div
+            className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4"
+            onClick={() => setShowDetails(false)}
+          >
+            <div
+              className="bg-white rounded-lg max-w-4xl max-h-[90vh] overflow-y-auto w-full"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold">Podcast Details</h2>
+                  <button
+                    onClick={() => setShowDetails(false)}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="space-y-6">
+                  {/* Script Section */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-2">Script</h3>
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <pre className="whitespace-pre-wrap text-sm text-gray-700 font-mono">
+                        {podcastMetadata.script || "No script available"}
+                      </pre>
+                    </div>
+                  </div>
+
+                  {/* Notes Section */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-2">Notes</h3>
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      {podcastMetadata.notes &&
+                      podcastMetadata.notes.length > 0 ? (
+                        <ul className="space-y-2">
+                          {podcastMetadata.notes.map((note, index) => (
+                            <li key={index} className="text-sm text-gray-700">
+                              • {note}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-gray-500">
+                          No notes available
+                        </p>
                       )}
                     </div>
                   </div>
-                )}
-              </div>
-            </div>
-
-            {/* Player Controls Section */}
-            <div className="px-4 pb-4">
-              <div className="space-y-4">
-                {/* Progress Bar */}
-                <div className="flex items-center space-x-4">
-                  <span className="text-sm text-gray-500">
-                    {formatTime(timestamp)}
-                  </span>
-                  <Slider
-                    value={[timestamp]}
-                    max={duration}
-                    step={1}
-                    onValueChange={(value) => handleSliderChange(value[0])}
-                    disabled={!podcastUrl}
-                  />
-                  <span className="text-sm text-gray-500">
-                    {formatTime(duration)}
-                  </span>
-                </div>
-
-                {/* Playback Controls */}
-                <div className="flex items-center justify-center space-x-4">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={rewind}
-                    disabled={!podcastUrl}
-                    className="w-12 h-12"
-                  >
-                    <RotateCcw className="h-6 w-6" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={togglePlay}
-                    disabled={!podcastUrl}
-                    className="w-16 h-16"
-                  >
-                    {isPlaying ? (
-                      <Pause className="h-8 w-8" />
-                    ) : (
-                      <Play className="h-8 w-8" />
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={fastForward}
-                    disabled={!podcastUrl}
-                    className="w-12 h-12"
-                  >
-                    <RotateCw className="h-6 w-6" />
-                  </Button>
-                </div>
-
-                {/* Playback Speed Controls */}
-                <div className="flex items-center justify-center space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSpeed(0.5)}
-                    disabled={!podcastUrl || playbackSpeed === 0.5}
-                  >
-                    0.5x
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSpeed(1)}
-                    disabled={!podcastUrl || playbackSpeed === 1}
-                  >
-                    1x
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSpeed(1.5)}
-                    disabled={!podcastUrl || playbackSpeed === 1.5}
-                  >
-                    1.5x
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSpeed(2)}
-                    disabled={!podcastUrl || playbackSpeed === 2}
-                  >
-                    2x
-                  </Button>
-                </div>
-
-                {/* AI Button */}
-                <div className="flex justify-center">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onMouseDown={handleMouseDown}
-                    onMouseUp={handleMouseUp}
-                    onMouseLeave={handleMouseUp}
-                    onTouchStart={handleMouseDown}
-                    onTouchEnd={handleMouseUp}
-                    disabled={
-                      !podcastUrl || aiLoading || isRequestingPermission
-                    }
-                    className={`relative ${aiActive ? "bg-red-500 hover:bg-red-600" : ""} w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-lg`}
-                  >
-                    {aiLoading ? (
-                      <div className="animate-spin h-10 w-10 border-4 border-current border-t-transparent rounded-full" />
-                    ) : isRequestingPermission ? (
-                      <div className="animate-spin h-10 w-10 border-4 border-current border-t-transparent rounded-full" />
-                    ) : (
-                      <div className="flex flex-col items-center">
-                        <Mic className="h-10 w-10" />
-                        <span className="text-xs mt-1 font-medium">
-                          {aiActive
-                            ? "Release"
-                            : hasMicPermission
-                              ? "Hold to talk"
-                              : "Tap for mic"}
-                        </span>
-                      </div>
-                    )}
-                  </Button>
                 </div>
               </div>
-            </div>
-
-            {/* Close Button */}
-            <div className="px-4 pb-4">
-              <Button
-                className="w-full"
-                variant="secondary"
-                onClick={handleClose}
-              >
-                Close
-              </Button>
             </div>
           </div>
         )}
@@ -1877,6 +1971,25 @@ ${podcastMetadata.notes.join("\n\n")}`,
                     </div>
                   </div>
                 )}
+                {!isPodcastFeed &&
+                  podcastMetadata &&
+                  !podcastMetadata.failed && (
+                    <div className="p-3 border rounded-lg bg-purple-50 border-purple-200">
+                      <div className="flex items-center space-x-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-purple-800">
+                            🤖 Personalized podcast by {hostNames.join(" and ")}
+                          </p>
+                          <button
+                            onClick={() => setShowDetails(true)}
+                            className="text-xs text-purple-600 hover:text-purple-800 mt-1 inline-block"
+                          >
+                            View details →
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 {isPodcastFeed &&
                   podcastMetadata?.directPlaybackInfo?.description && (
                     <div className="mt-2">
@@ -2039,6 +2152,8 @@ ${podcastMetadata.notes.join("\n\n")}`,
             selectedSource={selectedSource}
             onSourceChange={handleSourceChange}
             onAddCustomSource={handleAddCustomSource}
+            isMobile={isMobile}
+            onMobileSourceSelect={handleMobileSourceSelect}
           />
 
           {/* Reload Controls for Desktop - only show in debug mode */}

@@ -212,18 +212,8 @@ interface SourceSelectorProps {
   onSourceChange: (source: Source) => void;
   onAddCustomSource: (url: string) => void;
   onKeyDown?: (e: React.KeyboardEvent) => void;
-}
-
-function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(
-    typeof window !== "undefined" ? window.innerWidth < 768 : false
-  );
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-  return isMobile;
+  isMobile?: boolean;
+  onMobileSourceSelect?: (source: Source) => void;
 }
 
 export function SourceSelector({
@@ -232,6 +222,8 @@ export function SourceSelector({
   onSourceChange,
   onAddCustomSource,
   onKeyDown,
+  isMobile,
+  onMobileSourceSelect,
 }: SourceSelectorProps) {
   const [showSearchSection, setShowSearchSection] = useState(false);
   const [searchInput, setSearchInput] = useState("");
@@ -256,7 +248,6 @@ export function SourceSelector({
     }
     return defaultStarred;
   });
-  const isMobile = useIsMobile();
 
   // Save starred feeds to localStorage whenever they change
   useEffect(() => {
@@ -343,6 +334,14 @@ export function SourceSelector({
   const starredSources = sources.filter((source) =>
     starredFeeds.has(source.id)
   );
+
+  const handleSourceClick = (source: Source) => {
+    if (isMobile && onMobileSourceSelect) {
+      onMobileSourceSelect(source);
+    } else {
+      onSourceChange(source);
+    }
+  };
 
   return (
     <Card>
@@ -450,7 +449,7 @@ export function SourceSelector({
                         className={`flex items-center justify-between p-2 rounded-lg cursor-pointer hover:bg-gray-50 ${
                           selectedSource.id === source.id ? "bg-gray-100" : ""
                         }`}
-                        onClick={() => onSourceChange(source)}
+                        onClick={() => handleSourceClick(source)}
                       >
                         <div className="flex items-center space-x-2">
                           {source.imageUrl ? (
@@ -517,7 +516,7 @@ export function SourceSelector({
                                 ? "bg-gray-100"
                                 : ""
                             }`}
-                            onClick={() => onSourceChange(source)}
+                            onClick={() => handleSourceClick(source)}
                           >
                             <div className="flex items-center space-x-2">
                               {source.imageUrl ? (
