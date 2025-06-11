@@ -59,6 +59,9 @@ app.use(
   })
 );
 
+// Mount the router at /api
+app.use("/api", router);
+
 // Serve static files from the podcasts directory with error handling
 router.use("/podcasts", (req, res, next) => {
   const staticHandler = express.static(PODCASTS_DIR);
@@ -561,12 +564,6 @@ router.post("/process-all-feeds", async (_req, res) => {
 router.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
-
-if (process.env.NODE_ENV !== "development") {
-  app.use("/", router);
-} else {
-  app.use("/api", router);
-}
 
 // Handle 404 for unknown routes
 app.use((_, res) => {
