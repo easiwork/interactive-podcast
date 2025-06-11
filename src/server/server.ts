@@ -573,9 +573,12 @@ router.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+// Configure routes
 if (process.env.NODE_ENV !== "development") {
-  app.use("/", router);
+  // In production, mount the router at /api
+  app.use("/api", router);
 } else {
+  // In development, also mount at /api for consistency
   app.use("/api", router);
 }
 

@@ -35,16 +35,7 @@ import { Input } from "@/components/ui/input";
 
 const NUM_STORIES = 10;
 const getApiBaseUrl = () => {
-  if (process.env.NODE_ENV === "development") {
-    // In development, check if we're accessing via domain or localhost
-    if (
-      typeof window !== "undefined" &&
-      window.location.hostname === "podcastjukebox.com"
-    ) {
-      return "/api"; // Use Vite proxy
-    }
-    return "http://localhost:3000/api";
-  }
+  // Always use /api as the base URL, regardless of environment
   return "/api";
 };
 
