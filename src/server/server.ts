@@ -577,14 +577,22 @@ router.get("/health", (_req, res) => {
 if (process.env.NODE_ENV !== "development") {
   // In production, mount the router at /api
   app.use("/api", router);
+
+  // Serve static files from the public directory
+  app.use(express.static(path.join(process.cwd(), "dist")));
+
+  // Handle all other routes by serving the index.html
+  app.get("*", (_, res) => {
+    res.sendFile(path.join(process.cwd(), "dist", "index.html"));
+  });
 } else {
-  // In development, also mount at /api for consistency
+  // In development, mount at /api for consistency
   app.use("/api", router);
 }
 
-// Handle 404 for unknown routes
-app.use((_, res) => {
-  res.status(404).send("Not Found");
+// Handle 404 for unknown API routes
+app.use("/api/*", (_, res) => {
+  res.status(404).json({ error: "API endpoint not found" });
 });
 
 // Global error handler for unhandled errors
