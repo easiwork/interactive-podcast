@@ -48,7 +48,7 @@ const getApiBaseUrl = () => {
   return "/api";
 };
 
-const API_BASE_URL = getApiBaseUrl();
+const API_BASE_URL = import.meta.env.DEV ? "/api" : "";
 
 interface StoryMetadata extends Story {
   expanded: boolean;
