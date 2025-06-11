@@ -436,11 +436,13 @@ router.get("/proxy-image", async (req, res) => {
 // Endpoint for loading cached podcast data only
 router.post("/load-cached-podcast", async (req, res) => {
   try {
+    console.log("[load-cached-podcast] Received request with body:", req.body);
     const { rssFeedUrl } = req.body as {
       rssFeedUrl: string;
     };
 
     if (!rssFeedUrl) {
+      console.log("[load-cached-podcast] Error: RSS feed URL is required");
       res.status(400).json({ error: "RSS feed URL is required" });
       return;
     }
@@ -455,8 +457,15 @@ router.post("/load-cached-podcast", async (req, res) => {
       "direct_playback.json"
     );
 
+    console.log("[load-cached-podcast] Checking paths:", {
+      feedSpecificDir,
+      metadataPath,
+      directPlaybackPath,
+    });
+
     // Check for direct playback info first
     if (fs.existsSync(directPlaybackPath)) {
+      console.log("[load-cached-podcast] Found direct playback info");
       const directPlaybackData = JSON.parse(
         fs.readFileSync(directPlaybackPath, "utf-8")
       );
@@ -474,6 +483,7 @@ router.post("/load-cached-podcast", async (req, res) => {
 
     // Check for generated podcast metadata
     if (fs.existsSync(metadataPath)) {
+      console.log("[load-cached-podcast] Found metadata file");
       const cachedData = JSON.parse(fs.readFileSync(metadataPath, "utf-8"));
 
       // Convert file system path to web-accessible URL if needed
@@ -494,6 +504,7 @@ router.post("/load-cached-podcast", async (req, res) => {
     }
 
     // No cached data found
+    console.log("[load-cached-podcast] No cached data found");
     res.json({
       status: "not_generated",
       script: "",
@@ -502,7 +513,7 @@ router.post("/load-cached-podcast", async (req, res) => {
       feedItems: [],
     });
   } catch (error) {
-    console.error("Failed to load cached podcast:", error);
+    console.error("[load-cached-podcast] Error:", error);
     res.status(500).json({
       error: "Failed to load cached podcast",
       status: "error",

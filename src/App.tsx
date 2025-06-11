@@ -48,7 +48,7 @@ const getApiBaseUrl = () => {
   return "/api";
 };
 
-const API_BASE_URL = import.meta.env.DEV ? "/api" : "";
+const API_BASE_URL = getApiBaseUrl();
 
 interface StoryMetadata extends Story {
   expanded: boolean;
@@ -227,7 +227,7 @@ export default function App() {
   // Rename processFeed to loadCachedFeed - only loads pre-generated content
   const loadCachedFeed = async (source: Source) => {
     try {
-      console.log("Loading cached feed:", source.url);
+      console.log("[loadCachedFeed] Loading cached feed:", source.url);
       const response = await fetch(`${API_BASE_URL}/load-cached-podcast`, {
         method: "POST",
         headers: {
@@ -239,11 +239,19 @@ export default function App() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to load cached feed");
+        const errorText = await response.text();
+        console.error("[loadCachedFeed] Server error:", {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText,
+        });
+        throw new Error(
+          `Failed to load cached feed: ${response.status} ${response.statusText}`
+        );
       }
 
       const data = await response.json();
-      console.log("Cached feed loaded:", data);
+      console.log("[loadCachedFeed] Cached feed loaded:", data);
 
       // Update state with cached data
       setProcessedFeeds((prev) => ({
@@ -253,7 +261,7 @@ export default function App() {
 
       // Update UI based on cached data
       if (data.isDirectPlayback && data.directPlaybackInfo) {
-        console.log("Setting up direct playback from cache");
+        console.log("[loadCachedFeed] Setting up direct playback from cache");
         setIsPodcastFeed(true);
         setPodcastUrl(data.directPlaybackInfo.audioUrl);
 
@@ -287,7 +295,7 @@ export default function App() {
           directPlaybackInfo,
         });
       } else if (data.status === "processing") {
-        console.log("Feed is still being processed");
+        console.log("[loadCachedFeed] Feed is still being processed");
         setError(
           "This podcast is still being generated. Please check back in a few minutes."
         );
@@ -304,7 +312,7 @@ export default function App() {
           } as PodcastMetadata,
         }));
       } else if (data.status === "not_generated") {
-        console.log("Feed has not been generated today");
+        console.log("[loadCachedFeed] Feed has not been generated today");
         setError("This podcast hasn't been generated for today yet.");
         setProcessedFeeds((prev) => ({
           ...prev,
@@ -319,7 +327,10 @@ export default function App() {
           } as PodcastMetadata,
         }));
       } else if (data.failed) {
-        console.log("Cached feed shows generation failed:", data.failureReason);
+        console.log(
+          "[loadCachedFeed] Cached feed shows generation failed:",
+          data.failureReason
+        );
         setIsPodcastFeed(false);
         setPodcastUrl(data.audioFile);
         setError(
@@ -327,13 +338,13 @@ export default function App() {
         );
         setPodcastMetadata(data);
       } else {
-        console.log("Setting up regular playback from cache");
+        console.log("[loadCachedFeed] Setting up regular playback from cache");
         setIsPodcastFeed(false);
         setPodcastUrl(`${API_BASE_URL}${data.audioFile}`);
         setPodcastMetadata(data);
       }
     } catch (error) {
-      console.error("Failed to load cached feed:", error);
+      console.error("[loadCachedFeed] Failed to load cached feed:", error);
       setError("Failed to load podcast. It may not have been generated yet.");
 
       setProcessedFeeds((prev) => ({
