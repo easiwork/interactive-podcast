@@ -35,8 +35,13 @@ import { Input } from "@/components/ui/input";
 
 const NUM_STORIES = 10;
 const getApiBaseUrl = () => {
-  // Always use /api as the base URL, regardless of environment
-  return "/api";
+  // Debug logging for API URL configuration
+  const apiUrl = "/api";
+  console.log(`[getApiBaseUrl] API base URL: ${apiUrl}`);
+  console.log(
+    `[getApiBaseUrl] Full URL for endpoint would be: ${window.location.origin}${apiUrl}/endpoint`
+  );
+  return apiUrl;
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -218,8 +223,12 @@ export default function App() {
   // Rename processFeed to loadCachedFeed - only loads pre-generated content
   const loadCachedFeed = async (source: Source) => {
     try {
+      const url = `${API_BASE_URL}/load-cached-podcast`;
+      console.log(`[loadCachedFeed] Making request to: ${url}`);
+      console.log(`[loadCachedFeed] Full URL: ${window.location.origin}${url}`);
       console.log("[loadCachedFeed] Loading cached feed:", source.url);
-      const response = await fetch(`${API_BASE_URL}/load-cached-podcast`, {
+
+      const response = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -235,6 +244,8 @@ export default function App() {
           status: response.status,
           statusText: response.statusText,
           error: errorText,
+          url: url,
+          fullUrl: window.location.origin + url,
         });
         throw new Error(
           `Failed to load cached feed: ${response.status} ${response.statusText}`
@@ -336,6 +347,13 @@ export default function App() {
       }
     } catch (error) {
       console.error("[loadCachedFeed] Failed to load cached feed:", error);
+      console.error("[loadCachedFeed] Error details:", {
+        message: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : undefined,
+        apiBaseUrl: API_BASE_URL,
+        windowLocation: window.location.href,
+      });
+
       setError("Failed to load podcast. It may not have been generated yet.");
 
       setProcessedFeeds((prev) => ({

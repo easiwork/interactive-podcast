@@ -43,6 +43,10 @@ export const createAudioStreamFromText = async (
 const app = express();
 const router = express.Router();
 
+console.log(`[SERVER] Starting server with NODE_ENV=${process.env.NODE_ENV}`);
+console.log(`[SERVER] Current working directory: ${process.cwd()}`);
+console.log(`[SERVER] PODCASTS_DIR: ${PODCASTS_DIR}`);
+
 // Middleware
 app.use(express.json());
 app.use(
@@ -58,6 +62,19 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  const start = Date.now();
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    console.log(
+      `[${new Date().toISOString()}] ${req.method} ${req.url} ${res.statusCode} ${res.statusMessage} - ${duration}ms`
+    );
+  });
+  next();
+});
 
 // Serve static files from the podcasts directory with error handling
 router.use("/podcasts", (req, res, next) => {
@@ -433,10 +450,20 @@ router.get("/proxy-image", async (req, res) => {
   }
 });
 
+// Add debug middleware to log all router requests
+router.use((req, res, next) => {
+  console.log(
+    `[ROUTER] ${req.method} ${req.originalUrl} (mapped from ${req.url})`
+  );
+  next();
+});
+
 // Endpoint for loading cached podcast data only
 router.post("/load-cached-podcast", async (req, res) => {
   try {
-    console.log("[load-cached-podcast] Received request with body:", req.body);
+    console.log("[load-cached-podcast] Received request");
+    console.log("[load-cached-podcast] Request body:", req.body);
+
     const { rssFeedUrl } = req.body as {
       rssFeedUrl: string;
     };
@@ -461,46 +488,73 @@ router.post("/load-cached-podcast", async (req, res) => {
       feedSpecificDir,
       metadataPath,
       directPlaybackPath,
+      exists: {
+        feedSpecificDir: fs.existsSync(feedSpecificDir),
+        metadataPath: fs.existsSync(metadataPath),
+        directPlaybackPath: fs.existsSync(directPlaybackPath),
+      },
     });
 
     // Check for direct playback info first
     if (fs.existsSync(directPlaybackPath)) {
       console.log("[load-cached-podcast] Found direct playback info");
-      const directPlaybackData = JSON.parse(
-        fs.readFileSync(directPlaybackPath, "utf-8")
-      );
-      res.json({
-        script: `Direct podcast playback: ${directPlaybackData.title}`,
-        audioFile: directPlaybackData.audioUrl,
-        notes: [directPlaybackData.description || "No description available"],
-        feedItems: directPlaybackData.feedItems || [],
-        isDirectPlayback: true,
-        directPlaybackInfo: directPlaybackData,
-        status: "ready",
-      });
-      return;
+      try {
+        const directPlaybackData = JSON.parse(
+          fs.readFileSync(directPlaybackPath, "utf-8")
+        );
+        console.log(
+          "[load-cached-podcast] Successfully parsed direct playback data"
+        );
+        res.json({
+          script: `Direct podcast playback: ${directPlaybackData.title}`,
+          audioFile: directPlaybackData.audioUrl,
+          notes: [directPlaybackData.description || "No description available"],
+          feedItems: directPlaybackData.feedItems || [],
+          isDirectPlayback: true,
+          directPlaybackInfo: directPlaybackData,
+          status: "ready",
+        });
+        return;
+      } catch (err) {
+        console.error(
+          "[load-cached-podcast] Error parsing direct playback data:",
+          err
+        );
+      }
     }
 
     // Check for generated podcast metadata
     if (fs.existsSync(metadataPath)) {
       console.log("[load-cached-podcast] Found metadata file");
-      const cachedData = JSON.parse(fs.readFileSync(metadataPath, "utf-8"));
+      try {
+        const cachedData = JSON.parse(fs.readFileSync(metadataPath, "utf-8"));
+        console.log("[load-cached-podcast] Successfully parsed metadata");
 
-      // Convert file system path to web-accessible URL if needed
-      if (
-        cachedData.audioFile &&
-        !cachedData.audioFile.startsWith("http") &&
-        !cachedData.audioFile.startsWith("/")
-      ) {
-        const relativePath = path.relative(process.cwd(), cachedData.audioFile);
-        cachedData.audioFile = `/${relativePath.replace(/\\/g, "/")}`;
+        // Convert file system path to web-accessible URL if needed
+        if (
+          cachedData.audioFile &&
+          !cachedData.audioFile.startsWith("http") &&
+          !cachedData.audioFile.startsWith("/")
+        ) {
+          const relativePath = path.relative(
+            process.cwd(),
+            cachedData.audioFile
+          );
+          cachedData.audioFile = `/${relativePath.replace(/\\/g, "/")}`;
+          console.log(
+            "[load-cached-podcast] Converted audioFile path:",
+            cachedData.audioFile
+          );
+        }
+
+        res.json({
+          ...cachedData,
+          status: cachedData.failed ? "failed" : "ready",
+        });
+        return;
+      } catch (err) {
+        console.error("[load-cached-podcast] Error parsing metadata:", err);
       }
-
-      res.json({
-        ...cachedData,
-        status: cachedData.failed ? "failed" : "ready",
-      });
-      return;
     }
 
     // No cached data found
@@ -568,36 +622,129 @@ router.post("/process-all-feeds", async (_req, res) => {
   }
 });
 
-// Add health check endpoint
+// Add health check endpoint with detailed info
 router.get("/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  const healthInfo = {
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || "unknown",
+    cwd: process.cwd(),
+    podcastsDir: PODCASTS_DIR,
+    podcastsDirExists: fs.existsSync(PODCASTS_DIR),
+    routes: {
+      api: true,
+      loadCachedPodcast: true,
+      processAllFeeds: true,
+      health: true,
+    },
+  };
+  console.log("[health] Health check requested:", healthInfo);
+  res.json(healthInfo);
+});
+
+// Add detailed diagnostic endpoint
+router.get("/diagnostic", (req, res) => {
+  try {
+    // Get system information
+    const diagnostic = {
+      timestamp: new Date().toISOString(),
+      environment: {
+        nodeEnv: process.env.NODE_ENV || "not set",
+        nodeVersion: process.version,
+        platform: process.platform,
+        arch: process.arch,
+        cwd: process.cwd(),
+      },
+      filesystem: {
+        podcastsDir: PODCASTS_DIR,
+        podcastsDirExists: fs.existsSync(PODCASTS_DIR),
+        distDirExists: fs.existsSync(path.join(process.cwd(), "dist")),
+        publicDirExists: fs.existsSync(path.join(process.cwd(), "public")),
+        podcastDirContents: [] as string[],
+        podcastDirCount: 0,
+        podcastDirError: "",
+      },
+      routes: {
+        registeredRoutes: router.stack
+          .filter((layer: any) => layer.route)
+          .map((layer: any) => ({
+            path: layer.route.path,
+            methods: Object.keys(layer.route.methods),
+          })),
+      },
+    };
+
+    // Get directory contents
+    try {
+      if (fs.existsSync(PODCASTS_DIR)) {
+        const podcastDirContents = fs.readdirSync(PODCASTS_DIR);
+        diagnostic.filesystem.podcastDirContents = podcastDirContents.slice(
+          0,
+          10
+        ); // Limit to first 10
+        diagnostic.filesystem.podcastDirCount = podcastDirContents.length;
+      }
+    } catch (err) {
+      diagnostic.filesystem.podcastDirError = (err as Error).message;
+    }
+
+    console.log("[diagnostic] Diagnostic information requested:", diagnostic);
+    res.json(diagnostic);
+  } catch (error) {
+    console.error(
+      "[diagnostic] Error generating diagnostic information:",
+      error
+    );
+    res.status(500).json({ error: "Error generating diagnostic information" });
+  }
 });
 
 // Configure routes
+console.log(
+  `[SERVER] Configuring routes for environment: ${process.env.NODE_ENV}`
+);
 if (process.env.NODE_ENV !== "development") {
+  console.log("[SERVER] Mounting router at /api for production mode");
   // In production, mount the router at /api
   app.use("/api", router);
 
+  console.log(
+    "[SERVER] Setting up static file serving from:",
+    path.join(process.cwd(), "dist")
+  );
   // Serve static files from the public directory
   app.use(express.static(path.join(process.cwd(), "dist")));
 
+  console.log("[SERVER] Setting up catch-all route to serve index.html");
   // Handle all other routes by serving the index.html
-  app.get("*", (_, res) => {
+  app.get("*", (req, res) => {
+    console.log(`[SERVER] Catch-all route serving index.html for: ${req.url}`);
     res.sendFile(path.join(process.cwd(), "dist", "index.html"));
   });
 } else {
+  console.log("[SERVER] Mounting router at /api for development mode");
   // In development, mount at /api for consistency
   app.use("/api", router);
 }
 
 // Handle 404 for unknown API routes
-app.use("/api/*", (_, res) => {
+app.use("/api/*", (req, res) => {
+  console.log(`[SERVER] 404 for unknown API route: ${req.url}`);
   res.status(404).json({ error: "API endpoint not found" });
 });
 
+// Add catch-all handler for unmatched routes
+app.use((req, res) => {
+  console.log(`[SERVER] Unmatched route: ${req.method} ${req.url}`);
+  res.status(404).send("Not Found");
+});
+
 // Global error handler for unhandled errors
-app.use((err: any, req: any, res: any) => {
-  console.error(`[${new Date().toISOString()}] Unhandled error:`, err.message);
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error(
+    `[${new Date().toISOString()}] Unhandled error for ${req.method} ${req.url}:`,
+    err
+  );
 
   // Handle Range Not Satisfiable errors globally
   if (
@@ -606,25 +753,37 @@ app.use((err: any, req: any, res: any) => {
     err.statusCode === 416
   ) {
     console.error(
-      `Global Range Not Satisfiable error for ${req.path}. Redirecting to failure audio.`
+      `[ERROR] Global Range Not Satisfiable error for ${req.path}. Redirecting to failure audio.`
     );
     return res.redirect("/podcast_fail.m4a");
   }
 
   // Handle other file serving errors
   if (err.status >= 400 && err.status < 500) {
-    console.error(`Global client error (${err.status}) for ${req.path}.`);
+    console.error(
+      `[ERROR] Global client error (${err.status}) for ${req.path}.`
+    );
     return res
       .status(err.status)
       .json({ error: err.message || "Client error" });
   }
 
   // Handle server errors
-  console.error(`Global server error for ${req.path}:`, err);
+  console.error(`[ERROR] Global server error for ${req.path}:`, err);
   res.status(500).json({ error: "Internal server error" });
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`[SERVER] Server running at http://localhost:${PORT}`);
+  console.log(`[SERVER] API available at http://localhost:${PORT}/api`);
+});
+
+// Log uncaught exceptions
+process.on("uncaughtException", (err) => {
+  console.error(`[FATAL] Uncaught exception:`, err);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error(`[FATAL] Unhandled rejection at:`, promise, `reason:`, reason);
 });
