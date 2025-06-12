@@ -451,7 +451,7 @@ router.get("/proxy-image", async (req, res) => {
 });
 
 // Add debug middleware to log all router requests
-router.use((req, res, next) => {
+router.use((req, _res, next) => {
   console.log(
     `[ROUTER] ${req.method} ${req.originalUrl} (mapped from ${req.url})`
   );
@@ -643,7 +643,7 @@ router.get("/health", (_req, res) => {
 });
 
 // Add detailed diagnostic endpoint
-router.get("/diagnostic", (req, res) => {
+router.get("/diagnostic", (_req, res) => {
   try {
     // Get system information
     const diagnostic = {
@@ -740,7 +740,7 @@ app.use((req, res) => {
 });
 
 // Global error handler for unhandled errors
-app.use((err: any, req: any, res: any, next: any) => {
+app.use((err: any, req: any, res: any, _next: any) => {
   console.error(
     `[${new Date().toISOString()}] Unhandled error for ${req.method} ${req.url}:`,
     err
