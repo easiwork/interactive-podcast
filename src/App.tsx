@@ -193,6 +193,22 @@ export default function App() {
   const [isButtonHeld, setIsButtonHeld] = useState(false);
   const isButtonHeldRef = useRef(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [starredFeeds, setStarredFeeds] = useState<Set<string>>(() => {
+    // Initialize with default starred feeds
+    const defaultStarred = new Set(["hackernews", "gastropod", "npr"]);
+    // Load any previously starred feeds from localStorage
+    const saved = localStorage.getItem("starredFeeds");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return new Set([...defaultStarred, ...parsed]);
+    }
+    return defaultStarred;
+  });
+
+  // Save starred feeds to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem("starredFeeds", JSON.stringify([...starredFeeds]));
+  }, [starredFeeds]);
 
   // Check if debug mode is enabled via query parameter
   const isDebugMode = () => {
@@ -801,6 +817,18 @@ ${podcastMetadata.notes.join("\n\n")}`,
     try {
       console.log("Starting custom feed addition:", url);
 
+      // Reset playback state
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        audioRef.current.src = "";
+      }
+      setIsPlaying(false);
+      setTimestamp(0);
+      setDuration(0);
+      setError(null);
+      setExpandedDescription(false);
+
       // First get feed info
       const response = await fetch(`${API_BASE_URL}/podcast-playback`, {
         method: "POST",
@@ -829,7 +857,31 @@ ${podcastMetadata.notes.join("\n\n")}`,
         imageUrl: feedInfo?.feedInfo?.imageUrl || feedInfo?.imageUrl,
       };
 
-      // Process the feed
+      // Add the source and star it immediately
+      setSources((prev) => [...prev, newSource]);
+      setStarredFeeds((prev) => new Set([...prev, newSource.id]));
+      setSelectedSource(newSource);
+
+      // Set initial processing state
+      setProcessedFeeds((prev) => ({
+        ...prev,
+        [newSource.id]: {
+          script: "",
+          audioFile: "",
+          notes: [],
+          stories: [],
+          needsGeneration: true,
+          status: "not_generated",
+          source: newSource,
+        } as PodcastMetadata,
+      }));
+
+      // Show processing message
+      setError(
+        "This feed is being processed. Please check back in a few minutes."
+      );
+
+      // Process the feed in the background
       console.log("Processing feed...");
       const processResponse = await fetch(`${API_BASE_URL}/generate-podcast`, {
         method: "POST",
@@ -848,15 +900,17 @@ ${podcastMetadata.notes.join("\n\n")}`,
       const processedData = await processResponse.json();
       console.log("Feed processed:", processedData);
 
-      // Update all states in a single batch
+      // Update states with processed data
       const updates = () => {
-        console.log("Updating states...");
-        setSources((prev) => [...prev, newSource]);
-        setSelectedSource(newSource);
+        console.log("Updating states with processed data...");
+        // Update processed feeds
         setProcessedFeeds((prev) => ({
           ...prev,
           [newSource.id]: processedData,
         }));
+
+        // Clear processing message
+        setError(null);
 
         // Always use the direct playback info from the initial feed info
         if (feedInfo?.audioUrl) {
@@ -883,7 +937,7 @@ ${podcastMetadata.notes.join("\n\n")}`,
           setPodcastUrl(`${API_BASE_URL}${processedData.audioFile}`);
           setPodcastMetadata(processedData);
         }
-        console.log("States updated");
+        console.log("States updated with processed data");
       };
 
       // Use setTimeout to ensure state updates happen in the next tick
@@ -899,71 +953,37 @@ ${podcastMetadata.notes.join("\n\n")}`,
         isCustom: true,
       };
 
-      try {
-        console.log("Retrying feed processing...");
-        const processResponse = await fetch(
-          `${API_BASE_URL}/generate-podcast`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              rssFeedUrl: url,
-            }),
-          }
-        );
-
-        if (processResponse.ok) {
-          const processedData = await processResponse.json();
-          console.log("Feed processed on retry:", processedData);
-
-          // Update all states in a single batch
-          const updates = () => {
-            console.log("Updating states on retry...");
-            setSources((prev) => [...prev, newSource]);
-            setSelectedSource(newSource);
-            setProcessedFeeds((prev) => ({
-              ...prev,
-              [newSource.id]: processedData,
-            }));
-
-            // Always use the direct playback info from the initial feed info
-            if (feedInfo?.audioUrl) {
-              console.log("Setting direct playback state on retry");
-              setIsPodcastFeed(true);
-              setPodcastUrl(feedInfo.audioUrl);
-              if (feedInfo.feedInfo?.title) {
-                setFeedTitle(feedInfo.feedInfo.title);
-              }
-              setPodcastMetadata({
-                ...processedData,
-                isDirectPlayback: true,
-                directPlaybackInfo: {
-                  title: feedInfo.title,
-                  audioUrl: feedInfo.audioUrl,
-                  pubDate: feedInfo.pubDate,
-                  description: feedInfo.description,
-                  feedInfo: feedInfo.feedInfo,
-                },
-              });
-            } else {
-              console.log("Setting regular playback state on retry");
-              setIsPodcastFeed(false);
-              setPodcastUrl(`${API_BASE_URL}${processedData.audioFile}`);
-              setPodcastMetadata(processedData);
-            }
-            console.log("States updated on retry");
-          };
-
-          // Use setTimeout to ensure state updates happen in the next tick
-          setTimeout(updates, 0);
-        }
-      } catch (processError) {
-        console.error("Failed to process feed:", processError);
-        setSources((prev) => [...prev, newSource]);
-        setSelectedSource(newSource);
+      // Reset playback state even on error
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        audioRef.current.src = "";
       }
+      setIsPlaying(false);
+      setTimestamp(0);
+      setDuration(0);
+      setExpandedDescription(false);
+
+      // Add the source and star it even if processing fails
+      setSources((prev) => [...prev, newSource]);
+      setStarredFeeds((prev) => new Set([...prev, newSource.id]));
+      setSelectedSource(newSource);
+
+      // Set error state
+      setProcessedFeeds((prev) => ({
+        ...prev,
+        [newSource.id]: {
+          script: "",
+          audioFile: "",
+          notes: [],
+          stories: [],
+          needsGeneration: true,
+          status: "error",
+          source: newSource,
+          error: error instanceof Error ? error.message : "Unknown error",
+        } as PodcastMetadata,
+      }));
+      setError("Failed to process feed. You can try generating it manually.");
     }
   };
 
@@ -982,6 +1002,18 @@ ${podcastMetadata.notes.join("\n\n")}`,
       });
     }
   }, [podcastMetadata?.directPlaybackInfo?.description]);
+
+  const handleToggleStar = (feedId: string) => {
+    setStarredFeeds((prev) => {
+      const next = new Set(prev);
+      if (next.has(feedId)) {
+        next.delete(feedId);
+      } else {
+        next.add(feedId);
+      }
+      return next;
+    });
+  };
 
   // Helper for artwork src
   const getArtworkSrc = () => {
@@ -1393,6 +1425,8 @@ ${podcastMetadata.notes.join("\n\n")}`,
               onAddCustomSource={handleAddCustomSource}
               isMobile={isMobile}
               onMobileSourceSelect={handleMobileSourceSelect}
+              starredFeeds={starredFeeds}
+              onToggleStar={handleToggleStar}
             />
 
             {error && (
@@ -2174,6 +2208,8 @@ ${podcastMetadata.notes.join("\n\n")}`,
             onAddCustomSource={handleAddCustomSource}
             isMobile={isMobile}
             onMobileSourceSelect={handleMobileSourceSelect}
+            starredFeeds={starredFeeds}
+            onToggleStar={handleToggleStar}
           />
 
           {/* Reload Controls for Desktop - only show in debug mode */}

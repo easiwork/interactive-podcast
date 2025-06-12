@@ -206,7 +206,7 @@ export const defaultSources: Source[] = [
   },
 ];
 
-interface SourceSelectorProps {
+export interface SourceSelectorProps {
   sources: Source[];
   selectedSource: Source;
   onSourceChange: (source: Source) => void;
@@ -214,6 +214,8 @@ interface SourceSelectorProps {
   onKeyDown?: (e: React.KeyboardEvent) => void;
   isMobile?: boolean;
   onMobileSourceSelect?: (source: Source) => void;
+  starredFeeds: Set<string>;
+  onToggleStar: (feedId: string) => void;
 }
 
 export function SourceSelector({
@@ -224,6 +226,8 @@ export function SourceSelector({
   onKeyDown,
   isMobile,
   onMobileSourceSelect,
+  starredFeeds,
+  onToggleStar,
 }: SourceSelectorProps) {
   const [showSearchSection, setShowSearchSection] = useState(false);
   const [searchInput, setSearchInput] = useState("");
@@ -237,22 +241,6 @@ export function SourceSelector({
   const [processingFeeds, setProcessingFeeds] = useState<Set<string>>(
     new Set()
   );
-  const [starredFeeds, setStarredFeeds] = useState<Set<string>>(() => {
-    // Initialize with default starred feeds
-    const defaultStarred = new Set(["hackernews", "gastropod", "npr"]);
-    // Load any previously starred feeds from localStorage
-    const saved = localStorage.getItem("starredFeeds");
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return new Set([...defaultStarred, ...parsed]);
-    }
-    return defaultStarred;
-  });
-
-  // Save starred feeds to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem("starredFeeds", JSON.stringify([...starredFeeds]));
-  }, [starredFeeds]);
 
   const handleSearchSubmit = async () => {
     if (searchInput.trim()) {
@@ -297,15 +285,7 @@ export function SourceSelector({
 
   const toggleStar = (feedId: string, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent feed selection when clicking star
-    setStarredFeeds((prev) => {
-      const next = new Set(prev);
-      if (next.has(feedId)) {
-        next.delete(feedId);
-      } else {
-        next.add(feedId);
-      }
-      return next;
-    });
+    onToggleStar(feedId);
   };
 
   const filteredSources = sources.filter((source) => {
