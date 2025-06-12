@@ -582,24 +582,7 @@ router.post("/process-all-feeds", async (_req, res) => {
 
     // Use defaultSources as the source of truth
     const feedUrls = defaultSources.map((source: Source) => source.url);
-
-    // Trigger processing for each feed in the background
-    // Note: In production, you'd want to use a proper job queue
-    const processingPromises = feedUrls.map(async (feedUrl: string) => {
-      try {
-        console.log(`Processing feed: ${feedUrl}`);
-        await generateFullPodcast(feedUrl, false); // Don't force regenerate unless specifically requested
-        console.log(`Completed processing: ${feedUrl}`);
-        return { feedUrl, status: "success" };
-      } catch (error) {
-        console.error(`Failed to process feed ${feedUrl}:`, error);
-        return {
-          feedUrl,
-          status: "error",
-          error: error instanceof Error ? error.message : "Unknown error",
-        };
-      }
-    });
+    const BATCH_SIZE = 3; // Process 3 feeds at a time
 
     // Don't wait for all to complete - return immediately
     res.json({
@@ -608,14 +591,44 @@ router.post("/process-all-feeds", async (_req, res) => {
       status: "processing",
     });
 
-    // Process in background
-    Promise.all(processingPromises)
-      .then((results) => {
-        console.log("Background processing completed:", results);
-      })
-      .catch((error) => {
-        console.error("Background processing error:", error);
-      });
+    // Process in background with batching
+    (async () => {
+      const results = [];
+      for (let i = 0; i < feedUrls.length; i += BATCH_SIZE) {
+        const batch = feedUrls.slice(i, i + BATCH_SIZE);
+        console.log(
+          `Processing batch ${i / BATCH_SIZE + 1} of ${Math.ceil(feedUrls.length / BATCH_SIZE)}`
+        );
+
+        const batchPromises = batch.map(async (feedUrl: string) => {
+          try {
+            console.log(`Processing feed: ${feedUrl}`);
+            await generateFullPodcast(feedUrl, false); // Don't force regenerate unless specifically requested
+            console.log(`Completed processing: ${feedUrl}`);
+            return { feedUrl, status: "success" };
+          } catch (error) {
+            console.error(`Failed to process feed ${feedUrl}:`, error);
+            return {
+              feedUrl,
+              status: "error",
+              error: error instanceof Error ? error.message : "Unknown error",
+            };
+          }
+        });
+
+        const batchResults = await Promise.all(batchPromises);
+        results.push(...batchResults);
+
+        // Add a small delay between batches to allow memory to be freed
+        if (i + BATCH_SIZE < feedUrls.length) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+      }
+
+      console.log("Background processing completed:", results);
+    })().catch((error) => {
+      console.error("Background processing error:", error);
+    });
   } catch (error) {
     console.error("Failed to start background processing:", error);
     res.status(500).json({ error: "Failed to start background processing" });
