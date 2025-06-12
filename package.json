@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "copy": "cp -r dist/* /var/www/podcastjukebox.com/",
-    "build-and-copy": "bun run build && bun run copy && sudo systemctl restart podcast-jukebox.service",
+    "build-and-copy": "bun run build && bun run copy && sudo systemctl restart podcastjukebox.service",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "server:dev": "NODE_ENV=development bun --watch src/server/server.ts",
